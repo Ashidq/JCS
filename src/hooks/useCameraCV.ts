@@ -1,24 +1,16 @@
-// src/hooks/useCameraCV.ts
-// Next.js App Router + FastAPI YOLO Detector
-// Flow:
-// Camera → Frame → Python YOLO API → Stable Detection → Auto Capture
-
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-
-declare global {
-  interface Window {
-    cv: any;
-  }
-}
+import { useRouter } from "next/navigation";
+import { useCameraStream } from "./useCameraStream";
+import { sendFrameToAPI } from "./useFrameSender";
+import { useStability } from "./useStability";
 
 interface PhoneBox {
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-  confidence: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 export const useCameraCV = (
@@ -26,224 +18,175 @@ export const useCameraCV = (
   isCapturing: boolean,
   onAutoCapture?: () => void
 ) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const detectCanvasRef = useRef<HTMLCanvasElement>(null);
+  const router = useRouter();
+  const { videoRef } = useCameraStream();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const detectionCountRef = useRef<number>(0);
-  const requestLockRef = useRef<boolean>(false);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // ===== STATE untuk phoneBox =====
   const [phoneBox, setPhoneBox] = useState<PhoneBox | null>(null);
 
-  /*
-  =====================================
-  INIT CAMERA
-  =====================================
-  */
-  useEffect(() => {
-    let stream: MediaStream | null = null;
+  const requestLockRef = useRef(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const hasCapturedRef = useRef(false);
 
-    const initCamera = async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: "environment",
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-          audio: false,
-        });
+  // =========================
+  // 🔥 CAPTURE API
+  // =========================
+  const captureToAPI = async (canvas: HTMLCanvasElement) => {
+    return new Promise<void>((resolve) => {
+      canvas.toBlob(async (blob) => {
+        if (!blob) return resolve();
 
-        if (videoRef.current) {
-          const video = videoRef.current;
+        const formData = new FormData();
+        formData.append("file", blob, "capture.jpg");
 
-          // Hindari reload stream berulang
-          if (!video.srcObject) {
-            video.srcObject = stream;
-          }
+        try {
+          console.log("📤 SENDING CAPTURE TO BACKEND...");
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+          
+          const res = await fetch(`${API_URL}/capture-payment`, {
+            method: "POST",
+            body: formData,
+          });
 
-          // Tunggu metadata siap sebelum play()
-          video.onloadedmetadata = async () => {
-            try {
-              await video.play();
-              console.log("✅ Camera ready");
-            } catch (err) {
-              console.error("Video play error:", err);
-            }
-          };
+          const data = await res.json();
+          console.log("📦 BACKEND CAPTURE RESULT:", data);
+        } catch (err) {
+          console.error("❌ BACKEND CAPTURE ERROR:", err);
         }
-      } catch (error) {
-        console.error("Camera access denied:", error);
-      }
-    };
+        resolve();
+      }, "image/jpeg", 0.95);
+    });
+  };
 
-    initCamera();
+  const stopAll = () => {
+    console.log("🛑 STOP ALL CV LOOPS");
+    hasCapturedRef.current = true;
+    requestLockRef.current = true;
 
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  };
 
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, []);
+  // =========================
+  // 🔥 STABILITY TRIGGER (OCR & REDIRECT)
+  // =========================
+  const { update } = useStability(async () => {
+    if (hasCapturedRef.current) return;
 
-  /*
-  =====================================
-  SEND FRAME TO PYTHON YOLO API
-  =====================================
-  */
+    console.log("📸 FINAL TRIGGER: STABLE PAYMENT DETECTED");
+    stopAll();
+
+    // 1. Simpan gambar ke Backend Python (YOLO Capture)
+    if (canvasRef.current) {
+      await captureToAPI(canvasRef.current);
+    }
+
+    // 2. Jalankan OCR & Supabase di Page.tsx
+    // Kita berikan sedikit jeda agar UI status terupdate
+    if (onAutoCapture) {
+      console.log("🤖 TRIGGERING OCR PROCESSOR...");
+      onAutoCapture();
+    }
+
+    // ⚠️ PERHATIAN: Jangan router.replace di sini jika onAutoCapture 
+    // di page.tsx juga melakukan redirect. Biarkan page.tsx yang mengatur flow.
+  });
+
+  // =========================
+  // SHARPNESS CALCULATION
+  // =========================
+  const getSharpness = (canvas: HTMLCanvasElement) => {
+    // Tambahkan willReadFrequently: true untuk performa & hapus warning console
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return 0;
+
+    const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+    let sum = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      sum += gray;
+    }
+    return sum / (width * height);
+  };
+
+  // =========================
+  // MAIN LOOP (DETECTION)
+  // =========================
   useEffect(() => {
     if (!isCVReady || isCapturing) return;
 
     const video = videoRef.current;
-    const canvas = detectCanvasRef.current;
-
+    const canvas = canvasRef.current;
     if (!video || !canvas) return;
 
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return;
 
-    const detectPaymentScreen = async () => {
+    const loop = async () => {
       if (
+        hasCapturedRef.current ||
         requestLockRef.current ||
         !video ||
         video.videoWidth === 0 ||
         video.paused ||
         video.ended ||
         isCapturing
-      ) {
-        return;
-      }
+      ) return;
 
       requestLockRef.current = true;
 
       try {
-        /*
-        =====================================
-        Resize lebih kecil agar request cepat
-        =====================================
-        */
+        // Set resolusi canvas sesuai orientasi portrait mobile
         canvas.width = 720;
         canvas.height = 1280;
 
-        ctx.drawImage(
-          video,
-          0,
-          0,
-          canvas.width,
-          canvas.height
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const sharpness = getSharpness(canvas);
+
+        const blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob(resolve, "image/jpeg", 0.85) // Kualitas sedikit diturunkan untuk speed
         );
 
-        /*
-        =====================================
-        Convert canvas → blob
-        =====================================
-        */
-        const blob: Blob | null = await new Promise((resolve) => {
-          canvas.toBlob(resolve, "image/jpeg", 0.9);
-        });
+        if (!blob || hasCapturedRef.current) return;
 
-        if (!blob) {
-          requestLockRef.current = false;
-          return;
-        }
+        // Kirim ke API Deteksi (YOLO)
+        const result = await sendFrameToAPI(blob);
 
-        /*
-        =====================================
-        Send to FastAPI
-        =====================================
-        */
-        const formData = new FormData();
-        formData.append("file", blob, "frame.jpg");
+        if (!result || hasCapturedRef.current) return;
 
-        const API_URL =
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        setPhoneBox(result.box || null);
 
-        const response = await fetch(
-          `${API_URL}/detect-payment-screen`,
-          {
-            method: "POST",
-            body: formData,
-          }
+        // Update stability tracker
+        update(
+          result.detected,
+          result.confidence,
+          result.box,
+          sharpness
         );
-
-        if (!response.ok) {
-          throw new Error(`API Error: ${response.status}`);
-        }
-
-        const result = await response.json();
-
-        if (result.box) {
-          setPhoneBox(result.box);
-        } else {
-          setPhoneBox(null);
-        }
-
-        /*
-        =====================================
-        STABILITY CHECK
-        harus detect beberapa kali
-        =====================================
-        */
-        if (result.detected) {
-          detectionCountRef.current += 1;
-
-          console.log(
-            `📱 Stable Detection Count: ${detectionCountRef.current}`,
-            result.confidence
-          );
-
-          /*
-          =====================================
-          Auto capture setelah stabil 3x
-          =====================================
-          */
-          if (detectionCountRef.current >= 3) {
-            detectionCountRef.current = 0;
-
-            console.log("📸 AUTO CAPTURE TRIGGERED");
-
-            if (onAutoCapture) {
-              onAutoCapture();
-            }
-          }
-        } else {
-          detectionCountRef.current = Math.max(
-            0,
-            detectionCountRef.current - 1
-          );
-        }
-      } catch (error) {
-        console.error("YOLO API Detection Error:", error);
+      } catch (err) {
+        // Silent error agar tidak polusi console saat re-loading backend
       } finally {
         requestLockRef.current = false;
       }
     };
 
-    /*
-    =====================================
-    Detect tiap 1 detik
-    =====================================
-    */
-    intervalRef.current = setInterval(() => {
-      detectPaymentScreen();
-    }, 1000);
+    // Interval 500ms (2 FPS) cukup efisien untuk mobile browser
+    intervalRef.current = setInterval(loop, 500);
 
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
     };
-  }, [isCVReady, isCapturing, onAutoCapture]);
+  }, [isCVReady, isCapturing, update, videoRef]);
 
-  // return di bawah ganti jadi:
   return {
     videoRef,
-    canvasRef: detectCanvasRef,
+    canvasRef,
     phoneBox,
   };
 };

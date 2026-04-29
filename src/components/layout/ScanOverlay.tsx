@@ -5,7 +5,7 @@ interface PhoneBoxType {
   y: number;
   w: number;
   h: number;
-  confidence: number;
+  confidence?: number;
 }
 
 export const ScanOverlay = ({
@@ -13,79 +13,96 @@ export const ScanOverlay = ({
   status,
   isCVReady,
   phoneBox,
+  videoWidth = 720,
+  videoHeight = 1280,
 }: {
   isCapturing: boolean;
   status: string;
   isCVReady: boolean;
   phoneBox?: PhoneBoxType | null;
+  videoWidth?: number;
+  videoHeight?: number;
 }) => {
   const isDenied = status === "Akses Kamera Denied";
+
+  const isStable = status === "stable";
+  const isDetected = status === "detecting" || isStable;
 
   const topStatusClass = isCapturing
     ? "bg-yellow-500 shadow-lg"
     : isDenied
     ? "bg-red-500/80 shadow-lg"
+    : isStable
+    ? "bg-green-500/40 shadow-lg"
     : "bg-[#5EBA59]/30";
 
   const topStatusText = isCapturing
-    ? "⏳ Processing"
+    ? "⏳ Processing Capture"
     : isDenied
     ? `🔴 ${status}`
-    : `🟢 ${status}`;
+    : isStable
+    ? "🟢 STABLE - READY TO CAPTURE"
+    : `🟡 ${status}`;
 
   const frameClass = isCapturing
     ? "border-yellow-400 shadow-[0_0_30px_rgba(250,204,21,0.5)] scale-95"
+    : isStable
+    ? "border-green-400 shadow-[0_0_30px_rgba(34,197,94,0.5)] scale-100"
     : isDenied
     ? "border-red-400 shadow-[0_0_30px_rgba(239,68,68,0.4)]"
     : "border-[#487ADB]/60 shadow-[0_0_20px_rgba(72,122,219,0.3)]";
 
+  const scaleX = 100 / videoWidth;
+  const scaleY = 100 / videoHeight;
+
   return (
     <>
-      {/* STATUS OVERLAY */}
-      <div className={`absolute top-3 left-1/2 -translate-x-1/2 text-white text-[10px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full z-30 transition-colors duration-300 ${topStatusClass}`}>
+      {/* STATUS TOP */}
+      <div
+        className={`absolute top-3 left-1/2 -translate-x-1/2 text-white text-[10px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full z-30 transition-all duration-300 ${topStatusClass}`}
+      >
         {topStatusText}
       </div>
 
-      {/* PHONE BOX BOUNDING BOX - Dari YOLO Detection */}
+      {/* YOLO BOX */}
       {phoneBox && (
         <div
-          className="absolute z-20 border-4 border-green-400 rounded-2xl shadow-[0_0_25px_rgba(74,222,128,0.6)] pointer-events-none transition-all duration-300"
+          className={`absolute z-20 border-4 rounded-2xl pointer-events-none transition-all duration-150 ${
+            isStable
+              ? "border-green-400 shadow-[0_0_25px_rgba(74,222,128,0.6)]"
+              : "border-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.4)]"
+          }`}
           style={{
-            left: `${(phoneBox.x / 720) * 100}%`,
-            top: `${(phoneBox.y / 1280) * 100}%`,
-            width: `${(phoneBox.w / 720) * 100}%`,
-            height: `${(phoneBox.h / 1280) * 100}%`,
+            left: `${phoneBox.x * scaleX}%`,
+            top: `${phoneBox.y * scaleY}%`,
+            width: `${phoneBox.w * scaleX}%`,
+            height: `${phoneBox.h * scaleY}%`,
+            transform: "translateZ(0)",
           }}
         >
-          <div className="absolute -top-8 left-0 bg-green-500 text-white text-xs px-3 py-1 rounded-full font-bold">
-            ✅ Detected ({Math.round(phoneBox.confidence * 100)}%)
+          <div className="absolute -top-7 left-0 bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
+            {phoneBox.confidence
+              ? `🎯 ${(phoneBox.confidence * 100).toFixed(0)}%`
+              : "detected"}
           </div>
         </div>
       )}
 
-      {/* OUTSIDE DARK OVERLAY (tanpa blur di tengah frame) */}
+      {/* DARK OUTSIDE MASK (responsive FIX) */}
       <div className="absolute inset-0 z-10 pointer-events-none">
-        {/* TOP */}
-        <div className="absolute top-0 left-72 w-72 h-[calc(50%-12.5rem)] bg-black/5 backdrop-blur-xl" />
-
-        {/* BOTTOM */}
-        <div className="absolute bottom-0 left-72 w-72 h-[calc(50%-12.5rem)] bg-black/5 backdrop-blur-xl" />
-
-        {/* LEFT */}
-        <div className="absolute top-1/2 left-0 -translate-y-1/2 w-[calc(50%-9rem)] h-110 bg-black/10 backdrop-blur-xl" />
-
-        {/* RIGHT */}
-        <div className="absolute top-1/2 right-0 -translate-y-1/2 w-[calc(50%-9rem)] h-110 bg-black/10 backdrop-blur-xl" />
+        <div className="absolute inset-0 bg-black/20 backdrop-blur-md" />
       </div>
 
       {/* SCAN FRAME */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-        <div className={`w-70 h-98 border-2 rounded-3xl relative transition-all duration-500 ${frameClass}`}>
-          {/* CORNER FRAME */}
-          <div className="absolute w-10 h-10 border-t-5 border-l-5 border-inherit top-0 left-0 rounded-tl-2xl" />
-          <div className="absolute w-10 h-10 border-t-5 border-r-5 border-inherit top-0 right-0 rounded-tr-2xl" />
-          <div className="absolute w-10 h-10 border-b-5 border-l-5 border-inherit bottom-0 left-0 rounded-bl-2xl" />
-          <div className="absolute w-10 h-10 border-b-5 border-r-5 border-inherit bottom-0 right-0 rounded-br-2xl" />
+        <div
+          className={`w-72 h-96 border-2 rounded-3xl relative transition-all duration-500 ${frameClass}`}
+        >
+          {/* CORNERS */}
+          <div className="absolute w-8 h-8 border-t-4 border-l-4 border-inherit top-0 left-0 rounded-tl-2xl" />
+          <div className="absolute w-8 h-8 border-t-4 border-r-4 border-inherit top-0 right-0 rounded-tr-2xl" />
+          <div className="absolute w-8 h-8 border-b-4 border-l-4 border-inherit bottom-0 left-0 rounded-bl-2xl" />
+          <div className="absolute w-8 h-8 border-b-4 border-r-4 border-inherit bottom-0 right-0 rounded-br-2xl" />
 
           {/* SCAN LINE */}
           {!isDenied && (
@@ -98,14 +115,17 @@ export const ScanOverlay = ({
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md text-white text-[10px] px-5 py-1.5 rounded-full z-30 border border-white/10">
         ✨{" "}
         {isCapturing
-          ? "Menyimpan ke Database..."
+          ? "Menyimpan & Enhance Image..."
           : isDenied
           ? "Izin Kamera Dibutuhkan"
+          : isStable
+          ? "Stabil - Siap Capture OCR"
           : isCVReady
-          ? "Siap Mendeteksi Bukti"
-          : "Menginisialisasi AI Engine..."}
+          ? "AI Vision Active"
+          : "Menginisialisasi Engine..."}
       </div>
 
+      {/* ANIMATION */}
       <style jsx>{`
         @keyframes scan {
           0% {
@@ -122,7 +142,7 @@ export const ScanOverlay = ({
         }
 
         .animate-scan {
-          animation: scan 2.5s infinite linear;
+          animation: scan 2.2s infinite linear;
         }
       `}</style>
     </>

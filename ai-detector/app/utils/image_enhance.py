@@ -1,45 +1,39 @@
 import cv2
 import numpy as np
 
-
 def auto_brightness_contrast(image):
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # Gunakan LAB space untuk memproses cahaya tanpa merusak warna
+    lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    
+    # ClipLimit 1.2 - 1.5 biasanya sweet spot untuk layar HP
+    clahe = cv2.createCLAHE(clipLimit=1.2, tileGridSize=(8,8))
+    cl = clahe.apply(l)
+    
+    limg = cv2.merge((cl, a, b))
+    return cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
 
-    # histogram stretch
-    min_val = np.percentile(gray, 2)
-    max_val = np.percentile(gray, 98)
+def clean_noise(image):
+    # Menggunakan Fast Non-Local Means Denoising untuk hasil yang lebih bersih dari bilateral
+    # h=10 adalah kekuatan filter. Jika terlalu blur, turunkan ke 7.
+    return cv2.fastNlMeansDenoisingColored(image, None, 10, 10, 7, 21)
 
-    alpha = 255 / (max_val - min_val + 1e-5)
-    beta = -min_val * alpha
-
-    adjusted = cv2.convertScaleAbs(image, alpha=alpha, beta=beta)
-    return adjusted
-
-
-def sharpen(image):
-    kernel = np.array([
-        [0, -1, 0],
-        [-1, 5, -1],
-        [0, -1, 0]
-    ])
-
-    return cv2.filter2D(image, -1, kernel)
-
-
-def denoise(image):
-    return cv2.bilateralFilter(image, 9, 75, 75)
-
+def sharpen_clean(image):
+    # Unsharp masking: Memberikan kesan tajam tanpa bintik kasar
+    gaussian = cv2.GaussianBlur(image, (0, 0), 3)
+    return cv2.addWeighted(image, 1.5, gaussian, -0.5, 0)
 
 def enhance_image(image):
     """
-    Pipeline utama:
-    1. brightness/contrast normalize
-    2. denoise
-    3. sharpen
+    Pipeline V2: Fokus pada kebersihan teks untuk OCR
     """
-
+    # 1. Normalkan cahaya agar teks muncul
     img = auto_brightness_contrast(image)
-    img = denoise(img)
-    img = sharpen(img)
-
+    
+    # 2. Hapus noise bintik-bintik (grain)
+    img = clean_noise(img)
+    
+    # 3. Tajamkan tepi karakter
+    img = sharpen_clean(img)
+    
     return img
