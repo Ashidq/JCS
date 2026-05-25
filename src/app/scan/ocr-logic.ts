@@ -35,6 +35,8 @@ export const preprocessImageWithOpenCV = async (imageBlob: Blob): Promise<string
     img.src = objectUrl;
 
     img.onload = () => {
+      let src: any, gray: any, claheDst: any, gammaDst: any, blurred: any, dst: any, lut: any;
+
       try {
         const cv = (window as any).cv;
         if (!cv || !cv.Mat) {
@@ -43,11 +45,13 @@ export const preprocessImageWithOpenCV = async (imageBlob: Blob): Promise<string
           return;
         }
 
-        const src = cv.imread(img);
-        const gray = new cv.Mat();
-        const normalized = new cv.Mat();
-        const blurred = new cv.Mat();
-        const dst = new cv.Mat();
+        src = cv.imread(img);
+        gray = new cv.Mat();
+        claheDst = new cv.Mat();
+        gammaDst = new cv.Mat();
+        blurred = new cv.Mat();
+        dst = new cv.Mat();
+        lut = new cv.Mat(1, 256, cv.CV_8UC1);
 
         // ----------------------------------------------------------------
         // Step 1: Grayscale
@@ -55,37 +59,42 @@ export const preprocessImageWithOpenCV = async (imageBlob: Blob): Promise<string
         cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
 
         // ----------------------------------------------------------------
-        // Step 2: Normalize brightness (CRITICAL untuk gambar overexposed)
-        //
-        // Masalah Otsu pada gambar terang:
-        //   → Histogram condong ke kanan (semua piksel ~230-255)
-        //   → Otsu menghitung threshold ~230, sehingga hampir SEMUA piksel
-        //     jadi putih dan teks hilang
-        //
-        // Solusi: normalize dulu ke range 0-255 agar histogram menyebar
-        //   → Piksel terendah jadi 0 (hitam), tertinggi jadi 255 (putih)
-        //   → Kontras antara teks dan latar menjadi terlihat kembali
+        // Step 2: CLAHE (Contrast Limited Adaptive Histogram Equalization)
+        // Menggantikan Normalize global untuk meratakan distribusi cahaya 
+        // ekstrem secara lokal.
         // ----------------------------------------------------------------
-        cv.normalize(gray, normalized, 0, 255, cv.NORM_MINMAX);
+        try {
+          // Beberapa versi OpenCV.js menggunakan cv.CLAHE, lainnya mungkin perlu adaptasi
+          const clahe = new cv.CLAHE(2.0, new cv.Size(8, 8));
+          clahe.apply(gray, claheDst);
+          clahe.delete();
+        } catch (e) {
+          console.warn("⚠️ [OpenCV] CLAHE gagal, fallback ke Normalize Global:", e);
+          cv.normalize(gray, claheDst, 0, 255, cv.NORM_MINMAX);
+        }
 
         // ----------------------------------------------------------------
-        // Step 3: Gaussian Blur ringan untuk hilangkan noise pixel
+        // Step 3: Gamma Correction (< 1.0)
+        // Menggelapkan area overexposed agar teks yang tenggelam muncul.
+        // Eksponen dihitung sebagai 1.0 / gamma agar nilai < 1.0 benar-benar 
+        // menggelapkan gambar sesuai kalkulasi matematika kurva gamma.
         // ----------------------------------------------------------------
-        cv.GaussianBlur(normalized, blurred, new cv.Size(3, 3), 0);
+        const gammaValue = 0.8;
+        const invGamma = 1.0 / gammaValue;
+        for (let i = 0; i < 256; i++) {
+          lut.data[i] = Math.min(255, Math.pow(i / 255.0, invGamma) * 255.0);
+        }
+        cv.LUT(claheDst, lut, gammaDst);
 
         // ----------------------------------------------------------------
-        // Step 4: Adaptive Thresholding
-        //
-        // Keunggulan vs Otsu global:
-        //   → Menghitung threshold SECARA LOKAL untuk setiap blok 15x15 px
-        //   → Tidak terpengaruh oleh brightness keseluruhan gambar
-        //   → Teks tetap terbaca meski ada area yang gelap / terang tidak merata
-        //
-        // Parameter:
-        //   ADAPTIVE_THRESH_GAUSSIAN_C  = bobot gaussian untuk blok lokal
-        //   THRESH_BINARY_INV           = teks jadi hitam, latar jadi putih
-        //   blockSize = 15              = ukuran blok lokal (harus ganjil)
-        //   C = 8                       = konstanta pengurang (kontrol sensitivitas)
+        // Step 4: Gaussian Blur ringan untuk hilangkan noise pixel
+        // ----------------------------------------------------------------
+        cv.GaussianBlur(gammaDst, blurred, new cv.Size(3, 3), 0);
+
+        // ----------------------------------------------------------------
+        // Step 5: Adaptive Thresholding
+        //   blockSize = 15
+        //   C = 5 (dikurangi dari 8 agar teks tipis spt HMIT tidak putus)
         // ----------------------------------------------------------------
         cv.adaptiveThreshold(
           blurred,
@@ -94,7 +103,7 @@ export const preprocessImageWithOpenCV = async (imageBlob: Blob): Promise<string
           cv.ADAPTIVE_THRESH_GAUSSIAN_C,
           cv.THRESH_BINARY,
           15,
-          8
+          5
         );
 
         // Render ke canvas dan ambil Data URL
@@ -102,20 +111,23 @@ export const preprocessImageWithOpenCV = async (imageBlob: Blob): Promise<string
         cv.imshow(canvas, dst);
         const processedUrl = canvas.toDataURL("image/png");
 
-        // Bersihkan memori Mat
-        src.delete();
-        gray.delete();
-        normalized.delete();
-        blurred.delete();
-        dst.delete();
         URL.revokeObjectURL(objectUrl);
 
-        console.log("✅ [OpenCV] Pre-processing selesai: Normalize → Blur → Adaptive Threshold.");
+        console.log("✅ [OpenCV] Pre-processing selesai: CLAHE → Gamma(0.8) → Blur → Adaptive Thresh.");
         resolve(processedUrl);
 
       } catch (err) {
         console.error("❌ [OpenCV] Pre-processing gagal, fallback ke gambar asli:", err);
         resolve(objectUrl);
+      } finally {
+        // CLEANUP SEMUA MAT UNTUK MENCEGAH WEBASSEMBLY MEMORY LEAK
+        if (src) src.delete();
+        if (gray) gray.delete();
+        if (claheDst) claheDst.delete();
+        if (gammaDst) gammaDst.delete();
+        if (blurred) blurred.delete();
+        if (dst) dst.delete();
+        if (lut) lut.delete();
       }
     };
 
@@ -131,35 +143,43 @@ export const preprocessImageWithOpenCV = async (imageBlob: Blob): Promise<string
 // Target akurasi ≥80%, waktu pemrosesan ≤5 detik
 // ============================================================
 
+let globalWorker: any = null;
+
+const getTesseractWorker = async () => {
+  if (!globalWorker) {
+    console.log("⚙️ [OCR] Menginisialisasi Singleton Tesseract Worker...");
+    globalWorker = await createWorker("ind+eng");
+    await globalWorker.setParameters({
+      tessedit_char_whitelist: "0123456789RrPpTtOoAaLlBbYyNnMmIiJjUuHhEeSsCcDdGgKkXx.,- ",
+      tessedit_pageseg_mode: "6" as any,
+    });
+  }
+  return globalWorker;
+};
+
 /**
  * Fungsi utama OCR. Menjalankan seluruh pipeline:
  * OpenCV Pre-processing → Tesseract Extraction → Cleaning → Validation
  */
 export const performOCR = async (imageBlob: Blob): Promise<OCRResult> => {
   const startTime = Date.now();
-  const worker = await createWorker("ind+eng");
+  let processedImageUrl = "";
 
   try {
+    const worker = await getTesseractWorker();
+
     // --- TAHAP 1: Pre-processing OpenCV ---
-    console.log("⚙️ [OCR] Memulai pre-processing OpenCV...");
-    const processedImageUrl = await preprocessImageWithOpenCV(imageBlob);
+    processedImageUrl = await preprocessImageWithOpenCV(imageBlob);
 
-    // --- TAHAP 2: Konfigurasi Tesseract ---
-    // Whitelist karakter mencegah Tesseract membaca karakter di luar konteks struk QRIS
-    await worker.setParameters({
-      tessedit_char_whitelist:
-        "0123456789RrPpTtOoAaLlBbYyNnMmIiJjUuHhEeSsCcDdGgKkXx.,- ",
-      // PSM 6: Assume uniform block of text – cocok untuk struk dengan layout kolom
-      tessedit_pageseg_mode: "6" as any,
-    });
-
-    // --- TAHAP 3: Ekstraksi Teks ---
-    console.log("🔍 [OCR] Mengekstrak teks dengan Tesseract.js...");
+    // --- TAHAP 2: Ekstraksi Teks ---
     const { data: { text } } = await worker.recognize(processedImageUrl);
-    await worker.terminate();
+
+    // Cleanup Object URL if fallback occurred
+    if (processedImageUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(processedImageUrl);
+    }
 
     const processingTimeMs = Date.now() - startTime;
-    console.log(`📝 [OCR RAW] (${processingTimeMs}ms):`, text);
 
     // Peringatan SKPL-NF-002 jika melebihi 5 detik
     if (processingTimeMs > 5000) {
@@ -181,7 +201,6 @@ export const performOCR = async (imageBlob: Blob): Promise<OCRResult> => {
 
     // --- TAHAP 4: Cleaning & Post-processing ---
     const cleanedText = cleanOCRText(text);
-    console.log("🧹 [OCR CLEANED]:", cleanedText);
 
     // --- TAHAP 5: Extraksi Nominal & Merchant ---
     const detectedAmount = extractNominal(cleanedText);
@@ -208,11 +227,11 @@ export const performOCR = async (imageBlob: Blob): Promise<OCRResult> => {
         merchantName: null,
         isSuccess: false,
         processingTimeMs,
-        error: "Validasi gagal: merchant 'HMIT' atau 'STORE' tidak terdeteksi.",
+        error: "Validasi gagal: merchant 'HMIT STORE ITS' tidak terdeteksi.",
       };
     }
 
-    console.log(`✅ [OCR] Berhasil! Nominal: Rp${detectedAmount.toLocaleString("id-ID")}, Merchant: ${merchant}`);
+    console.log(`🧠 OCR Result: { amount: ${detectedAmount}, merchantName: ${merchant}, isSuccess: ${detectedAmount !== null && merchant !== null} }`);
 
     return {
       rawText: text,
@@ -225,7 +244,9 @@ export const performOCR = async (imageBlob: Blob): Promise<OCRResult> => {
 
   } catch (err) {
     console.error("❌ [OCR] Runtime Error:", err);
-    try { await worker.terminate(); } catch { }
+    if (processedImageUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(processedImageUrl);
+    }
     return {
       rawText: "",
       cleanedText: "",
@@ -278,11 +299,11 @@ const extractNominal = (cleanedText: string): number | null => {
     // Pola 1: "RP" / "TOTAL" / "BAYAR" diikuti langsung nominal (Rp15.000 / TOTAL 15000)
     /(?:RP|TOTAL|BAYAR|NOMINAL|AMOUNT|JUMLAH|TRANSFER)\s?([0-9]{1,3}(?:[.,][0-9]{3})*)/i,
 
-    // Pola 2: Nominal diikuti kata konfirmasi keberhasilan (15000 BERHASIL)
-    /([0-9]{1,3}(?:[.,][0-9]{3})*)\s?(?:BERHASIL|SUCCESS|COMPLETED|SELESAI)/i,
+    // Pola 2: Nominal diikuti kata konfirmasi keberhasilan/membayar (15000 BERHASIL / 100 MEMBAYAR)
+    /([0-9]{1,3}(?:[.,][0-9]{3})*)\s?(?:MEMBAYAR|BERHASIL|SUCCESS|COMPLETED|SELESAI)/i,
 
-    // Pola 3: "RP" langsung diikuti angka tanpa spasi apapun (Rp15000)
-    /RP([0-9.,]+)/i,
+    // Pola 3: "RP" langsung diikuti angka dengan/tanpa spasi (Rp15000 / Rp 15000)
+    /RP\s?([0-9.,]+)/i,
 
     // Pola 4: Angka format ribuan berdiri sendiri (15.000 / 15,000) sebagai fallback
     /(?:^|\s)([0-9]{1,3}[.,][0-9]{3})(?:\s|$)/m,
@@ -314,14 +335,27 @@ const extractNominal = (cleanedText: string): number | null => {
 // ============================================================
 
 const extractMerchant = (cleanedText: string): string | null => {
-  // Kata kunci yang WAJIB ada untuk membuktikan struk dari kantin yang benar
-  const VALID_MERCHANTS = ["HMIT", "STORE"];
+  // Normalisasi: collapse semua whitespace/separator menjadi spasi tunggal
+  const normText = cleanedText.replace(/[\s\-_]+/g, ' ').trim();
 
-  for (const keyword of VALID_MERCHANTS) {
-    if (cleanedText.includes(keyword)) {
-      return keyword;
-    }
+  // Pola variasi tipografi Tesseract untuk "HMIT STORE ITS"
+  // Mencakup: HM1T, HN1T, HMITSTORE11S, HIT STORE, dll.
+  const hmitVariants = /H[MN1][IL1][T7]/i;
+  const storeVariants = /S[T7][O0][RP][E3]/i;
+  const itsVariants = /[I1][T7][S5]/i;
+
+  const hasHmit = hmitVariants.test(normText);
+  const hasStore = storeVariants.test(normText);
+  const hasIts = itsVariants.test(normText);
+
+  // Jika ada setidaknya dua komponen (HMIT + STORE, HMIT + ITS, atau STORE + ITS),
+  // atau ketiga komponen hadir → standarisasi ke "HMIT STORE ITS"
+  const matchCount = [hasHmit, hasStore, hasIts].filter(Boolean).length;
+
+  if (matchCount >= 2) {
+    return "HMIT STORE ITS";
   }
 
+  // Satu komponen saja tidak cukup → tidak bisa dikonfirmasi sebagai merchant kantin
   return null;
 };

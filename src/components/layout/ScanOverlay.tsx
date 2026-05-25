@@ -6,6 +6,7 @@ interface PhoneBoxType {
   w: number;
   h: number;
   confidence?: number;
+  isTolerating?: boolean;
 }
 
 export const ScanOverlay = ({
@@ -31,29 +32,31 @@ export const ScanOverlay = ({
   const topStatusClass = isCapturing
     ? "bg-yellow-500 shadow-lg"
     : isDenied
-    ? "bg-red-500/80 shadow-lg"
-    : isStable
-    ? "bg-green-500/40 shadow-lg"
-    : "bg-[#5EBA59]/30";
+      ? "bg-red-500/80 shadow-lg"
+      : isStable
+        ? "bg-green-500/40 shadow-lg"
+        : "bg-[#5EBA59]/30";
 
   const topStatusText = isCapturing
     ? "⏳ Processing Capture"
     : isDenied
-    ? `🔴 ${status}`
-    : isStable
-    ? "🟢 STABLE - READY TO CAPTURE"
-    : `🟡 ${status}`;
+      ? `🔴 ${status}`
+      : isStable
+        ? "🟢 STABLE - READY TO CAPTURE"
+        : `🟡 ${status}`;
 
   const frameClass = isCapturing
     ? "border-yellow-400 shadow-[0_0_30px_rgba(250,204,21,0.5)] scale-95"
     : isStable
-    ? "border-green-400 shadow-[0_0_30px_rgba(34,197,94,0.5)] scale-100"
-    : isDenied
-    ? "border-red-400 shadow-[0_0_30px_rgba(239,68,68,0.4)]"
-    : "border-[#487ADB]/60 shadow-[0_0_20px_rgba(72,122,219,0.3)]";
+      ? "border-green-400 shadow-[0_0_30px_rgba(34,197,94,0.5)] scale-100"
+      : isDenied
+        ? "border-red-400 shadow-[0_0_30px_rgba(239,68,68,0.4)]"
+        : "border-[#487ADB]/60 shadow-[0_0_20px_rgba(72,122,219,0.3)]";
 
   const scaleX = 100 / videoWidth;
   const scaleY = 100 / videoHeight;
+
+  const isErrorBox = phoneBox?.status === "phone_detected" || phoneBox?.status === "unknown_object";
 
   return (
     <>
@@ -67,11 +70,14 @@ export const ScanOverlay = ({
       {/* YOLO BOX */}
       {phoneBox && (
         <div
-          className={`absolute z-20 border-4 rounded-2xl pointer-events-none transition-all duration-150 ${
-            isStable
+          className={`absolute z-20 border-4 rounded-2xl pointer-events-none transition-all duration-150 ${isStable
               ? "border-green-400 shadow-[0_0_25px_rgba(74,222,128,0.6)]"
-              : "border-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.4)]"
-          }`}
+              : isErrorBox
+                ? "border-red-500 shadow-[0_0_25px_rgba(239,68,68,0.6)]"
+              : phoneBox.isTolerating
+                ? "border-yellow-400 shadow-[0_0_25px_rgba(250,204,21,0.6)]"
+                : "border-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.4)]"
+            }`}
           style={{
             left: `${phoneBox.x * scaleX}%`,
             top: `${phoneBox.y * scaleY}%`,
@@ -80,17 +86,21 @@ export const ScanOverlay = ({
             transform: "translateZ(0)",
           }}
         >
-          <div className="absolute -top-7 left-0 bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
-            {phoneBox.confidence
-              ? `🎯 ${(phoneBox.confidence * 100).toFixed(0)}%`
-              : "detected"}
+          <div className={`absolute -top-7 left-0 text-white text-[10px] px-2 py-0.5 rounded-full font-bold ${isErrorBox ? "bg-red-500" : phoneBox.isTolerating ? "bg-yellow-500" : "bg-green-500"}`}>
+            {isErrorBox
+              ? "⚠️ Bukan Struk Pembayaran"
+              : phoneBox.isTolerating
+              ? "⚠️ HOLD"
+              : phoneBox.confidence
+                ? `🎯 ${(phoneBox.confidence * 100).toFixed(0)}%`
+                : "detected"}
           </div>
         </div>
       )}
 
       {/* DARK OUTSIDE MASK (responsive FIX) */}
       <div className="absolute inset-0 z-10 pointer-events-none">
-        <div className="absolute inset-0 bg-black/20 backdrop-blur-md" />
+        <div className="absolute inset-0 bg-black/20" />
       </div>
 
       {/* SCAN FRAME */}
@@ -117,12 +127,12 @@ export const ScanOverlay = ({
         {isCapturing
           ? "Menyimpan & Enhance Image..."
           : isDenied
-          ? "Izin Kamera Dibutuhkan"
-          : isStable
-          ? "Stabil - Siap Capture OCR"
-          : isCVReady
-          ? "AI Vision Active"
-          : "Menginisialisasi Engine..."}
+            ? "Izin Kamera Dibutuhkan"
+            : isStable
+              ? "Stabil - Siap Capture OCR"
+              : isCVReady
+                ? "AI Vision Active"
+                : "Menginisialisasi Engine..."}
       </div>
 
       {/* ANIMATION */}

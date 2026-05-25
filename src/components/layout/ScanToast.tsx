@@ -21,7 +21,7 @@ export const ScanToast = ({ status }: { status: string }) => {
         exit={{ opacity: 0 }}
         className="fixed top-5 left-1/2 -translate-x-1/2
                    bg-black/80 text-white px-4 py-2 rounded-xl
-                   backdrop-blur-md text-sm z-50"
+                    text-sm z-50"
       >
         {map[status as keyof typeof map]}
       </motion.div>

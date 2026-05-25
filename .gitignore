@@ -39,3 +39,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Python backend output — excluded from Next.js watcher via next.config.ts
+# These directories are written to at runtime and must not trigger Fast Refresh
+ai-detector/output/
+ai-detector/debug_frames/
+output/
+debug_frames/
+
+.kiro/
+.vscode/
+ ai-detector/app/services/__pycache__/supabase_service.cpython-314.pyc

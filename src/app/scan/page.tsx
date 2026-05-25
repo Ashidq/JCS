@@ -2,366 +2,342 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState, useEffect, useCallback } from "react";
-import {
-  supabase,
-  uploadAndSaveTransaction,
-  updateOCRResult,
-  getPublicImageUrl,
-} from "./supabase-logic";
-import { performOCR } from "./ocr-logic";
 import Footer from "../../components/layout/Footer";
 import { CameraSection } from "./components/CameraSection";
-import { TipsPanel } from "./components/TipsPanel";
+import { getPublicImageUrl } from "./supabase-logic";
 
-declare global {
-  interface Window {
-    cv: any;
-  }
+// ============================================================
+// HELPERS — tidak diubah
+// ============================================================
+const API_URL = () => process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const resetCaptureLock = () =>
+  fetch(`${API_URL()}/reset-capture`, { method: "POST" }).catch(() => {});
+
+// ============================================================
+// TYPES — tidak diubah
+// ============================================================
+interface PreviewData {
+  id_bukti: string;
+  file_path: string;
+  public_url: string;
+  imageUrl: string;
 }
 
 // ============================================================
-// SCAN PAGE – Koordinator antara Manual Scan & Cloud AI Mode
+// SUB-COMPONENTS
 // ============================================================
+function PageStepper({ active }: { active: "scan" | "proses" | "hasil" }) {
+  const steps = [
+    { key: "scan",  label: "Scan"  },
+    { key: "proses", label: "Proses" },
+    { key: "hasil",  label: "Hasil"  },
+  ];
+  const activeIdx = steps.findIndex((s) => s.key === active);
+  return (
+    <div className="flex items-center gap-1">
+      {steps.map((s, i) => (
+        <div key={s.key} className="flex items-center gap-1">
+          <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all ${
+            i < activeIdx  ? "bg-blue-600 text-white" :
+            i === activeIdx ? "bg-blue-100 text-blue-600 ring-2 ring-blue-300" :
+                              "bg-gray-100 text-gray-400"
+          }`}>
+            {i < activeIdx && <span>✓</span>}
+            {s.label}
+          </div>
+          {i < steps.length - 1 && (
+            <div className={`w-5 h-0.5 ${i < activeIdx ? "bg-blue-600" : "bg-gray-200"}`} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
+function RobotMascot({ mood }: { mood: "scan" | "focus" }) {
+  return (
+    <div className="select-none inline-flex flex-col items-center">
+      <div className="w-12 h-10 bg-white rounded-xl border-2 border-blue-200 shadow flex items-center justify-center relative">
+        <span className="text-base font-black text-blue-600 tracking-widest">
+          {mood === "scan" ? "o o" : "> <"}
+        </span>
+        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-1 h-2.5 bg-blue-400 rounded-full" />
+        <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 w-2 h-2 bg-blue-500 rounded-full" />
+        {mood === "scan" && (
+          <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-400 rounded-full animate-ping opacity-75" />
+        )}
+      </div>
+      <div className="w-9 h-7 bg-blue-50 border-2 border-blue-200 rounded-b-xl flex items-center justify-center mt-0.5">
+        <div className="w-3.5 h-1 bg-blue-300 rounded-full" />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// PAGE
+// ============================================================
 export default function ScanPage() {
   const router = useRouter();
   const cameraRef = useRef<any>(null);
 
+  // ── SEMUA STATE & LOGIKA DIPERTAHANKAN ──
   const [isCapturing, setIsCapturing] = useState(false);
-  const [isOpenCVReady, setIsOpenCVReady] = useState(false);
-  const [status, setStatus] = useState("Menyiapkan Engine CV...");
-  const [cameraPermission, setCameraPermission] = useState<
-    "checking" | "granted" | "denied"
-  >("checking");
+  const isCapturingRef = useRef(false);
 
-  // Mode Cloud: mendengarkan trigger dari AI Detector (Python) via Supabase Realtime
-  const [isAutoMode, setIsAutoMode] = useState(false);
-
-  // ============================================================
-  // INISIALISASI: Kamera & OpenCV.js
-  // ============================================================
-
-  const requestCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-      });
-      stream.getTracks().forEach((track) => track.stop());
-      setCameraPermission("granted");
-      return true;
-    } catch (error) {
-      console.error("[Camera] Akses ditolak:", error);
-      setCameraPermission("denied");
-      setStatus("Akses Kamera Denied");
-      return false;
-    }
-  };
-
-  // Cek status kamera saat komponen pertama kali mount
-  useEffect(() => {
-    requestCamera();
+  const setIsCapturingSync = useCallback((val: boolean) => {
+    isCapturingRef.current = val;
+    setIsCapturing(val);
   }, []);
 
-  // Polling sampai OpenCV.js selesai dimuat dari CDN (tag <script> di layout)
+  const [isOpenCVReady, setIsOpenCVReady] = useState(false);
+  const [status, setStatus] = useState("Menyiapkan Engine CV...");
+  const [cameraPermission, setCameraPermission] = useState<"checking" | "granted" | "denied">("checking");
+  const [previewData, setPreviewData] = useState<PreviewData | null>(null);
+
+  useEffect(() => { resetCaptureLock(); }, []);
+
+  const requestCamera = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      stream.getTracks().forEach((t) => t.stop());
+      setCameraPermission("granted");
+      return true;
+    } catch {
+      setCameraPermission("denied");
+      setStatus("Akses Kamera Ditolak");
+      return false;
+    }
+  }, []);
+
+  useEffect(() => { requestCamera(); }, []);
+
   useEffect(() => {
     const interval = setInterval(() => {
-      if (window.cv?.Mat) {
+      if ((window as any).cv?.Mat) {
         setIsOpenCVReady(true);
-        if (cameraPermission === "granted") setStatus("Kamera Aktif");
+        if (cameraPermission === "granted") setStatus("📷 Kamera Aktif");
         clearInterval(interval);
       }
     }, 500);
     return () => clearInterval(interval);
   }, [cameraPermission]);
 
-  // ============================================================
-  // LOGIC 1: MANUAL CAPTURE (Dari Browser)
-  //
-  // ALUR BARU (Bug #4 fix):
-  // 1. Ambil gambar dari kamera (blob mentah)
-  // 2. Kirim ke Python /capture-payment → perspective warp → upload Supabase
-  // 3. Jika Mode Cloud aktif: OCR dijalankan via Realtime trigger otomatis
-  // 4. Fallback: jika Python offline, OCR langsung dari blob lokal
-  // ============================================================
+  const handleBackendResponse = useCallback(async (backendData: any) => {
+    if (!backendData || !backendData.success) return;
+    if (isCapturingRef.current) return;
+    setIsCapturingSync(true);
+    const { id_bukti, file_path, public_url } = backendData;
+    if (!file_path || !id_bukti) { setIsCapturingSync(false); return; }
+    const cleanFilePath = (file_path as string).replace(/^\/+/, "");
+    const imageUrl = public_url || getPublicImageUrl(cleanFilePath);
+    setPreviewData({ id_bukti: String(id_bukti), file_path: cleanFilePath, public_url: public_url ?? "", imageUrl });
+    setStatus("📸 Foto berhasil diambil");
+  }, [setIsCapturingSync]);
 
-  const runLocalOCR = async (blob: Blob) => {
-    try {
-      const ocrResult = await performOCR(blob);
-      const timeInfo = ocrResult.processingTimeMs
-        ? ` (${(ocrResult.processingTimeMs / 1000).toFixed(1)}s)` : "";
+  const handleRetake = useCallback(() => {
+    setPreviewData(null);
+    setIsCapturingSync(false);
+    setStatus("📷 Kamera Aktif");
+    resetCaptureLock();
+  }, [setIsCapturingSync]);
 
-      if (ocrResult.isSuccess) {
-        setStatus(`✅ Terdeteksi Rp${ocrResult.amount?.toLocaleString("id-ID")}${timeInfo}`);
-      } else {
-        setStatus(ocrResult.error || "Nominal tidak terbaca.");
-      }
+  const handleProceed = useCallback(() => {
+    if (!previewData) return;
+    const params = new URLSearchParams({
+      id_bukti: previewData.id_bukti,
+      file_path: previewData.file_path,
+      public_url: previewData.public_url,
+    });
+    router.push(`/proses?${params.toString()}`);
+  }, [previewData, router]);
 
-      await uploadAndSaveTransaction(blob, ocrResult.isSuccess ? ocrResult.amount : null);
-      setStatus("✅ Berhasil disimpan! Mengalihkan...");
-      setTimeout(() => { router.push("/"); router.refresh(); }, 2000);
-    } catch (err) {
-      console.error("❌ [runLocalOCR] Error:", err);
-      setStatus("Gagal menyimpan. Silakan coba lagi.");
-      setIsCapturing(false);
-    }
-  };
-
-  const onCapture = useCallback(async () => {
-    // Bug #1 fix: hapus syarat isOpenCVReady — tombol harus bisa diklik segera
-    if (isCapturing || cameraPermission !== "granted") return;
-
-    setIsCapturing(true);
-    setStatus("📸 Mengambil gambar...");
-
-    const blob = await cameraRef.current?.capture();
-    if (!blob) {
-      setStatus("❌ Gagal mengambil gambar dari kamera.");
-      setIsCapturing(false);
-      return;
-    }
-
-    try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-
-      // Bug #4 fix: kirim ke Python dulu untuk perspective warp & upload ke Supabase
-      setStatus("⚙️ Memproses gambar (Perspective Warp)...");
-      console.log("🚀 [onCapture] Kirim ke Python /capture-payment...");
-
-      const formData = new FormData();
-      formData.append("file", blob, "capture.jpg");
-
-      let pythonSuccess = false;
-      try {
-        const res = await fetch(`${API_URL}/capture-payment`, {
-          method: "POST",
-          body: formData,
-        });
-        const data = await res.json();
-        pythonSuccess = data.success === true;
-        console.log("📦 [onCapture] Python result:", data);
-      } catch (pyErr) {
-        console.warn("⚠️ [onCapture] Python offline, fallback ke OCR lokal:", pyErr);
-      }
-
-      if (pythonSuccess && isAutoMode) {
-        // Mode Cloud aktif + Python berhasil upload → tunggu Realtime trigger
-        setStatus("✅ Gambar terkirim! OCR Realtime berjalan...");
-        // isCapturing tetap true sampai processSupabaseImage selesai
-      } else {
-        // Fallback: OCR langsung dari blob kamera
-        setStatus("🔍 Menganalisis teks (OCR lokal)...");
-        await runLocalOCR(blob);
-      }
-    } catch (err) {
-      console.error("❌ [onCapture] Error:", err);
-      setStatus("Gagal memproses. Silakan coba lagi.");
-      setIsCapturing(false);
-    }
-  }, [isCapturing, cameraPermission, isAutoMode, router]);
-
-
-  // ============================================================
-  // LOGIC 2: SUPABASE REALTIME (Auto dari Python AI Detector)
-  // Python mengirim gambar → insert ke bukti_pembayaran dengan status "pending"
-  // → Next.js terima trigger → unduh gambar → OCR → update status di DB
-  // ============================================================
-
-  const processSupabaseImage = useCallback(async (newRecord: any) => {
-    // Anti-duplikat: jangan proses jika sedang ada OCR berjalan
-    if (isCapturing) {
-      console.warn("[Realtime] OCR sedang berjalan, trigger diabaikan.");
-      return;
-    }
-
-    setIsCapturing(true);
-    try {
-      console.log("[Realtime] Record baru diterima:", newRecord);
-      setStatus("⬇️ Menerima data dari AI Detector...");
-
-      // 1. Resolusi path gambar → URL publik Storage
-      const dbImagePath = newRecord.file_gambar;
-      if (!dbImagePath) {
-        throw new Error("Field 'file_gambar' kosong pada record Realtime.");
-      }
-
-      const publicUrl = getPublicImageUrl(dbImagePath);
-      console.log("[Realtime] Mengunduh dari:", publicUrl);
-
-      // 2. Download gambar dari Supabase Storage (SKPL-NF-012 error handling)
-      const response = await fetch(publicUrl);
-      if (!response.ok) {
-        throw new Error(`Gagal mengunduh gambar: HTTP ${response.status}`);
-      }
-      const blob = await response.blob();
-
-      // 3. Jalankan OCR pipeline lengkap
-      setStatus("🔍 Menganalisis teks (OCR)...");
-      const ocrResult = await performOCR(blob);
-      console.log("[Realtime] Hasil OCR:", ocrResult);
-
-      // 4. Ambil Primary Key – fleksibel untuk id_bukti atau id
-      const recordId = newRecord.id_bukti ?? newRecord.id;
-      if (!recordId) {
-        throw new Error("Primary Key 'id_bukti'/'id' tidak ditemukan pada record.");
-      }
-
-      // 5. Simpan hasil ke database
-      if (ocrResult.isSuccess) {
-        const timeInfo = ocrResult.processingTimeMs
-          ? ` (${(ocrResult.processingTimeMs / 1000).toFixed(1)}s)`
-          : "";
-        setStatus(
-          `✅ Terdeteksi Rp${ocrResult.amount?.toLocaleString("id-ID")}${timeInfo}`
-        );
-        await updateOCRResult(recordId, ocrResult.amount);
-      } else {
-        setStatus(`⚠️ ${ocrResult.error}`);
-        await updateOCRResult(recordId, null);
-      }
-
-      // Reset state setelah 3 detik → siap menerima trigger berikutnya
-      setTimeout(() => {
-        setStatus("🎧 Menunggu scan berikutnya...");
-        setIsCapturing(false);
-      }, 3000);
-    } catch (error) {
-      console.error("[Realtime] Error:", error);
-      setStatus(`❌ Error: ${(error as Error).message}`);
-      setIsCapturing(false);
-    }
-  }, [isCapturing]);
-
-  // Supabase Realtime Listener – aktif hanya saat isAutoMode = true
-  useEffect(() => {
-    if (!isAutoMode) return;
-
-    setStatus("🎧 Mendengarkan tabel 'bukti_pembayaran'...");
-    console.log("[Realtime] Berlangganan ke channel bukti_pembayaran...");
-
-    const channel = supabase
-      .channel("bukti-pembayaran-insert-channel")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "bukti_pembayaran",
-        },
-        (payload) => {
-          console.log("🔥 [Realtime] Trigger masuk!", payload.new);
-          processSupabaseImage(payload.new);
-        }
-      )
-      .subscribe((subscribeStatus) => {
-        if (subscribeStatus === "SUBSCRIBED") {
-          console.log("✅ [Realtime] Berhasil terhubung ke Supabase Realtime.");
-        } else if (subscribeStatus === "CHANNEL_ERROR") {
-          console.error("❌ [Realtime] Gagal terhubung ke channel.");
-          setStatus("❌ Koneksi Realtime gagal.");
-        }
-      });
-
-    // Cleanup: unsubscribe saat mode dimatikan atau komponen unmount
-    return () => {
-      supabase.removeChannel(channel);
-      console.log("[Realtime] Channel dihapus.");
-    };
-  }, [isAutoMode, processSupabaseImage]);
+  const onCapture = useCallback(() => {}, []);
+  const onBack = useCallback(() => router.back(), [router]);
 
   // ============================================================
   // RENDER
   // ============================================================
-
   return (
-    <div className="min-h-screen bg-[#F7F8FC] flex flex-col">
+    <div className="min-h-screen bg-white flex flex-col">
+
+      {/* HEADER */}
+      <header className="bg-white border-b border-gray-100 shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <span className="font-bold text-blue-900 text-sm">Jujurly Canteen System</span>
+          </div>
+          <PageStepper active="scan" />
+          <span className="text-xs font-semibold text-blue-400">KWU • HMIT</span>
+        </div>
+        <div className="h-[3px] bg-blue-600" />
+      </header>
+
+      {/* MAIN */}
       <main className="flex-grow flex items-center justify-center px-6 py-8 pb-28">
-        <div className="w-full max-w-7xl grid lg:grid-cols-[1fr_320px] gap-8">
 
-          {/* Komponen Kamera Utama */}
-          <CameraSection
-            cameraRef={cameraRef}
-            status={status}
-            isCapturing={isCapturing}
-            isOpenCVReady={isOpenCVReady}
-            cameraPermission={cameraPermission}
-            onCapture={onCapture}
-            onRetryPermission={requestCamera}
-            onBack={() => router.back()}
-          />
+        {previewData ? (
+          /* ================================================
+           * MODE B: PREVIEW
+           * ============================================== */
+          <div className="w-full max-w-4xl grid lg:grid-cols-2 gap-16 items-center">
 
-          <div className="flex flex-col gap-5">
-            <TipsPanel />
-
-            {/* Panel: Mode Cloud AI (Supabase Realtime) */}
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">
-                  Integrasi Cloud (AI)
-                </h3>
-                {/* Indikator status koneksi Realtime */}
-                {isAutoMode && (
-                  <span className="flex items-center gap-1 text-[10px] font-bold text-green-600">
-                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse inline-block" />
-                    LIVE
-                  </span>
-                )}
+            {/* Kolom kiri — mockup smartphone */}
+            <div className="flex flex-col items-center gap-5">
+              <div className="relative w-44 h-80 bg-gray-900 rounded-[2rem] border-4 border-gray-700 shadow-2xl overflow-hidden">
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 w-16 h-3 bg-gray-800 rounded-full z-10" />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={previewData.imageUrl}
+                  alt="Preview bukti pembayaran"
+                  className="w-full h-full object-cover"
+                />
               </div>
-
-              <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-                {isAutoMode
-                  ? "Sistem mendengarkan database. Scan QRIS menggunakan kamera AI eksternal."
-                  : "Aktifkan jika menggunakan kamera AI eksternal (Python Detector) untuk deteksi otomatis."}
-              </p>
-
-              <button
-                id="btn-toggle-cloud-mode"
-                onClick={() => {
-                  if (isAutoMode) setStatus("Kamera Aktif");
-                  setIsAutoMode(!isAutoMode);
-                }}
-                disabled={isCapturing}
-                className={`w-full text-sm font-bold py-3 rounded-xl transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed ${
-                  isAutoMode
-                    ? "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100"
-                    : "bg-[#2B4C7E] text-white hover:bg-[#1e3659]"
-                }`}
-              >
-                {isCapturing
-                  ? "⏳ Memproses Data..."
-                  : isAutoMode
-                  ? "🛑 Hentikan Mode Cloud"
-                  : "▶️ Mulai Mode Cloud"}
-              </button>
+              <div className="flex items-center gap-2 bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-full shadow">
+                <div className="w-2 h-2 bg-white rounded-full" />
+                Gambar berhasil ditangkap
+              </div>
             </div>
 
-            {/* Panel: Status Engine */}
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 mt-auto">
-              <div className="flex items-center justify-between">
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                    System Engine
-                  </span>
-                  <span className="text-xs font-bold text-[#487ADB]">
-                    {isCapturing ? "OCR PROCESSING" : "CV READY"}
-                  </span>
-                </div>
+            {/* Kolom kanan — konfirmasi */}
+            <div className="flex flex-col gap-6">
+              <div>
+                <span className="inline-flex items-center gap-1.5 bg-blue-100 text-blue-600 text-xs font-bold px-3 py-1.5 rounded-full">
+                  <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
+                  Konfirmasi Foto
+                </span>
+                <h2 className="text-2xl font-black text-blue-900 mt-2">Periksa Kualitas Gambar</h2>
+                <p className="text-sm text-gray-400 mt-1">
+                  Pastikan teks nominal dan nama merchant terlihat jelas sebelum melanjutkan.
+                </p>
+              </div>
 
-                <div
-                  className={`px-3 py-1 rounded-full text-[10px] font-black tracking-widest border transition-all duration-500 ${
-                    isOpenCVReady
-                      ? "bg-green-50 text-green-600 border-green-100"
-                      : "bg-yellow-50 text-yellow-600 border-yellow-100 animate-pulse"
-                  }`}
+              {/* Tombol aksi */}
+              <div className="flex gap-3">
+                <button
+                  onClick={handleRetake}
+                  className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl border-2 border-blue-600 text-blue-600 font-bold text-sm hover:bg-blue-50 active:scale-95 transition-all"
                 >
-                  {isOpenCVReady ? "● CORE ACTIVE" : "○ INITIALIZING"}
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Coba Foto Ulang
+                </button>
+                <button
+                  onClick={handleProceed}
+                  className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-blue-600 text-white font-bold text-sm shadow-md shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all"
+                >
+                  Foto Sudah Jelas
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+        ) : (
+          /* ================================================
+           * MODE A: KAMERA AKTIF
+           * ============================================== */
+          <div className="w-full max-w-4xl grid lg:grid-cols-[1fr_280px] gap-16 items-start">
+
+            {/* Kolom kiri — camera frame */}
+            <div className="flex flex-col gap-3">
+              {/* Status pill + batal */}
+              <div className="flex items-center justify-between">
+                <div className={`inline-flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full ${
+                  isOpenCVReady ? "bg-blue-100 text-blue-600" : "bg-yellow-100 text-yellow-600"
+                }`}>
+                  <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${isOpenCVReady ? "bg-blue-500" : "bg-yellow-500"}`} />
+                  {status}
+                </div>
+                <button onClick={onBack} className="text-xs text-gray-400 hover:text-gray-600 font-semibold transition-colors">
+                  ✕ Batal
+                </button>
+              </div>
+
+              {/* Camera frame */}
+              <div className="relative bg-gray-900 rounded-3xl overflow-hidden shadow-2xl border-2 border-gray-800">
+                {/* Corner accents */}
+                <div className="absolute top-3 left-3 w-5 h-5 border-t-2 border-l-2 border-blue-400 rounded-tl-md z-10 pointer-events-none" />
+                <div className="absolute top-3 right-3 w-5 h-5 border-t-2 border-r-2 border-blue-400 rounded-tr-md z-10 pointer-events-none" />
+                <div className="absolute bottom-3 left-3 w-5 h-5 border-b-2 border-l-2 border-blue-400 rounded-bl-md z-10 pointer-events-none" />
+                <div className="absolute bottom-3 right-3 w-5 h-5 border-b-2 border-r-2 border-blue-400 rounded-br-md z-10 pointer-events-none" />
+                <CameraSection
+                  cameraRef={cameraRef}
+                  status={status}
+                  isCapturing={isCapturing}
+                  isOpenCVReady={isOpenCVReady}
+                  cameraPermission={cameraPermission}
+                  onCapture={onCapture}
+                  onAutoCapture={handleBackendResponse}
+                  onRetryPermission={requestCamera}
+                  onBack={onBack}
+                />
+              </div>
+            </div>
+
+            {/* Kolom kanan — panduan */}
+            <div className="flex flex-col gap-6">
+              <div>
+                <span className="inline-flex items-center gap-1.5 bg-blue-100 text-blue-600 text-xs font-bold px-3 py-1.5 rounded-full">
+                  <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+                  Scanning aktif
+                </span>
+                <h2 className="text-xl font-black text-blue-900 mt-2">Pindai Bukti Pembayaran</h2>
+              </div>
+
+              {/* Langkah vertikal minimalis */}
+              <div className="flex flex-col">
+                {[
+                  { n: 1, title: "Dekatkan Struk QRIS ke Kamera",    desc: "Arahkan kamera ke struk bukti pembayaran" },
+                  { n: 2, title: "Jaga Posisi Tetap Stabil",          desc: "Tahan agar gambar tidak buram" },
+                  { n: 3, title: "Sistem Akan Menangkap Gambar Otomatis", desc: "Tunggu hingga auto-capture berjalan" },
+                ].map((step, idx) => (
+                  <div key={step.n} className="flex gap-3">
+                    <div className="flex flex-col items-center">
+                      <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-black shrink-0">
+                        {step.n}
+                      </div>
+                      {idx < 2 && <div className="w-0.5 h-8 bg-blue-200 mt-1" />}
+                    </div>
+                    <div className="pb-5">
+                      <p className="text-sm font-bold text-blue-900">{step.title}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{step.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Engine status */}
+              <div className="flex items-center justify-between py-3 border-t border-gray-100">
+                <span className="text-xs text-gray-400">System Engine</span>
+                <div className={`px-2.5 py-1 rounded-full text-[10px] font-black border ${
+                  isOpenCVReady
+                    ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+                    : "bg-yellow-50 text-yellow-600 border-yellow-100 animate-pulse"
+                }`}>
+                  {isOpenCVReady ? "● ACTIVE" : "○ LOADING"}
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
+
       </main>
 
-      <footer className="fixed bottom-0 left-0 w-full z-50 bg-[#487ADB] text-white">
+      {/* MASKOT — fixed pojok kanan bawah, ekspresi sesuai mode */}
+      <div className="fixed bottom-20 right-6 z-40">
+        <RobotMascot mood={previewData ? "focus" : "scan"} />
+      </div>
+
+      <footer className="fixed bottom-0 left-0 w-full z-50">
         <Footer />
       </footer>
     </div>

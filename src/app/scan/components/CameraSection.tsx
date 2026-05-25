@@ -8,6 +8,10 @@ interface CameraSectionProps {
   isOpenCVReady: boolean;
   cameraPermission: "checking" | "granted" | "denied";
   onCapture: () => void;
+
+  // ⭐ TAMBAHAN (untuk auto mode dari Python)
+  onAutoCapture?: (backendData: any) => void;
+
   onRetryPermission: () => void;
   onBack: () => void;
 }
@@ -19,6 +23,7 @@ export const CameraSection = ({
   isOpenCVReady,
   cameraPermission,
   onCapture,
+  onAutoCapture,
   onRetryPermission,
   onBack
 }: CameraSectionProps) => {
@@ -30,7 +35,9 @@ export const CameraSection = ({
           status={status}
           isCapturing={isCapturing}
           isCVReady={isOpenCVReady}
-          onAutoCapture={onCapture}
+
+          // ⭐ FIX: pakai handler dari page.tsx (BUKAN onCapture)
+          onAutoCapture={onAutoCapture}
         />
       </div>
 

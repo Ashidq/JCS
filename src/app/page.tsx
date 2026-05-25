@@ -1,83 +1,117 @@
 "use client";
 
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
+import Image from "next/image";
+import Footer from "../components/layout/Footer";
+
+function RobotMascotWelcome() {
+  return (
+    <div className="relative select-none inline-flex flex-col items-center">
+      <span className="absolute -top-4 -left-5 text-yellow-400 text-xl animate-bounce">★</span>
+      <span className="absolute -top-2 -right-4 text-yellow-300 text-sm animate-bounce delay-100">✦</span>
+      <span className="absolute top-3 -left-7 text-blue-300 text-xs animate-bounce delay-200">✦</span>
+      <div className="w-16 h-14 bg-white rounded-2xl border-2 border-blue-300 shadow-md flex items-center justify-center relative">
+        <span className="text-xl font-black text-blue-600 tracking-widest">^ ^</span>
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-1.5 h-4 bg-blue-400 rounded-full" />
+        <div className="absolute -top-5 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-500 rounded-full" />
+        <div className="absolute -right-5 top-2 text-lg animate-bounce">👋</div>
+      </div>
+      <div className="w-12 h-9 bg-blue-50 border-2 border-blue-200 rounded-b-2xl flex items-center justify-center mt-0.5">
+        <div className="w-5 h-2 bg-blue-300 rounded-full" />
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   const router = useRouter();
 
   return (
-    <div className="min-h-[85vh] flex flex-col items-center justify-center px-5">
-      {/* STEP 1: Persiapan AI Engine (Versi Lokal)
-        Pastikan file opencv.js sudah Anda simpan di folder /public/
-      */}
+    <div className="min-h-screen bg-white flex flex-col">
       <Script
-        src="/opencv.js" // Memanggil file lokal di folder public
+        src="/opencv.js"
         strategy="afterInteractive"
         onLoad={() => {
-          // Inisialisasi eksplisit untuk memastikan variabel 'cv' terdaftar di window
-          if (window.cv) {
-            window.cv.onRuntimeInitialized = () => {
-              console.log("✅ AI Engine: Local OpenCV.js Ready");
-            };
-            
-            // Antisipasi jika runtime sudah siap sebelum log terpanggil
-            if (window.cv.Mat) {
-               console.log("✅ AI Engine: OpenCV.js is already initialized");
-            }
+          if ((window as any).cv?.onRuntimeInitialized !== undefined) {
+            (window as any).cv.onRuntimeInitialized = () => {};
           }
-        }}
-        onError={() => {
-          console.error("❌ AI Engine: Failed to load local opencv.js. Make sure it exists in /public folder.");
         }}
       />
 
-      <div className="flex flex-col md:flex-row items-center gap-10 md:gap-20 lg:gap-32">
-        
-        {/* LEFT - IMAGE SECTION */}
-        <div className="relative flex items-center justify-center">
-          {/* Decorative Blobs */}
-          <div className="absolute w-64 h-64 md:w-72 md:h-72 bg-[#E9F3FD] rounded-full top-[-30px] right-[-30px] z-0"></div>
-          <div className="absolute w-40 h-40 md:w-50 md:h-50 bg-[#B5DAFF] rounded-full bottom-[-10px] right-[-60px] z-0"></div>
-          <div className="absolute w-60 h-60 md:w-75 md:h-75 bg-[#CDE1F8] rounded-full bottom-[-30px] left-[-80px] z-0"></div>
-
-          {/* QR Container */}
-          <div className="relative z-10 bg-white p-2 rounded-2xl shadow-2xl border border-gray-100">
-            <Image
-              src="/Qris.png"
-              alt="QRIS Payment Gateway"
-              width={250}
-              height={350}
-              className="rounded-xl shadow-inner"
-              priority
-            />
+      {/* HEADER — konsisten dengan halaman lain */}
+      <header className="bg-white border-b border-gray-100 shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <span className="font-bold text-blue-900 text-sm">Jujurly Canteen System</span>
           </div>
+          <span className="text-xs font-semibold text-blue-400">KWU • HMIT</span>
         </div>
+        <div className="h-[3px] bg-blue-600" />
+      </header>
 
-        {/* RIGHT - CONTENT SECTION */}
-        <div className="text-center md:text-left max-w-md mt-10 md:mt-0">
-          
-          <h1 className="text-3xl md:text-4xl font-bold text-[#2B4C7E] mb-4 leading-tight">
-            Silakan lakukan pembayaran terlebih dahulu
-          </h1>
+      {/* MAIN CONTENT */}
+      <div className="flex-grow flex items-center justify-center px-6 py-10 pb-28">
+        <div className="w-full max-w-4xl grid lg:grid-cols-2 gap-16 items-center">
 
-          <p className="text-[#5f6f89] mb-8 text-lg leading-relaxed">
-            Scan Qris di samping melalui aplikasi e-wallet Anda, lalu tekan tombol di bawah untuk memverifikasi bukti transfer secara otomatis.
-          </p>
+          {/* ── KOLOM KIRI: QRIS Visual ── */}
+          <div className="flex justify-center">
+            <div className="bg-white p-4 rounded-3xl shadow-2xl border border-gray-100">
+              <Image
+                src="/Qris.PNG"
+                alt="QRIS Payment"
+                width={260}
+                height={340}
+                className="rounded-2xl"
+                priority
+              />
+            </div>
+          </div>
 
-          <div className="flex flex-col gap-3">
+          {/* ── KOLOM KANAN: Teks & Aksi ── */}
+          <div className="flex flex-col gap-6">
+            {/* Badge */}
+            <span className="inline-flex items-center gap-2 bg-blue-100 text-blue-600 text-xs font-bold px-3 py-1.5 rounded-full w-fit">
+              <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+              Sistem Validasi Otomatis Berbasis AI
+            </span>
+
+            {/* Judul & deskripsi */}
+            <div>
+              <h1 className="text-4xl lg:text-5xl font-black text-blue-900 leading-tight">
+                Jujurly Canteen<br />
+                <span className="text-blue-600">System</span>
+              </h1>
+              <p className="text-gray-500 mt-4 text-base leading-relaxed">
+                Verifikasi bukti pembayaran QRIS secara otomatis menggunakan Computer Vision dan OCR.
+              </p>
+            </div>
+
+            {/* Tombol CTA */}
             <button
               onClick={() => router.push("/scan")}
-              className="w-full md:w-auto bg-gradient-to-r from-[#5A8DEE] to-[#487ADB] text-white px-12 py-4 rounded-2xl shadow-lg shadow-blue-200 hover:shadow-[#487ADB]/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 font-semibold text-lg"
+              className="flex items-center justify-center gap-2 bg-blue-600 text-white font-bold py-4 px-8 rounded-2xl shadow-md shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all text-base w-full lg:w-auto"
             >
-              Mulai Scan Bukti
+              Scan
             </button>
-
           </div>
-        </div>
 
+        </div>
       </div>
+
+      {/* ── MASKOT — fixed pojok kanan bawah, di atas footer ── */}
+      <div className="fixed bottom-20 right-6 z-40">
+        <RobotMascotWelcome />
+      </div>
+
+      <footer className="fixed bottom-0 left-0 w-full z-50">
+        <Footer />
+      </footer>
     </div>
   );
 }
