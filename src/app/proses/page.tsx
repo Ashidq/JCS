@@ -4,9 +4,12 @@ import { use, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
 import Footer from "../../components/layout/Footer";
+<<<<<<< HEAD
 import { TbLineScan } from "react-icons/tb";
 import { VscServerProcess } from "react-icons/vsc";
 import { AiOutlineFileDone } from "react-icons/ai";
+=======
+>>>>>>> cf6c3ba117aebbffaff69a214ab9071a4e84e33d
 import {
   getPublicImageUrl,
   saveOCRResult,
@@ -31,6 +34,7 @@ const STEPS: Record<Step, StepInfo> = {
 // ============================================================
 // STEPPER
 // ============================================================
+<<<<<<< HEAD
 function PageStepper({
   active,
 }: {
@@ -86,6 +90,26 @@ function PageStepper({
           </div>
         );
       })}
+=======
+function PageStepper({ active }: { active: "scan" | "proses" | "hasil" }) {
+  const steps = [{ key: "scan", label: "Scan" }, { key: "proses", label: "Proses" }, { key: "hasil", label: "Hasil" }];
+  const activeIdx = steps.findIndex((s) => s.key === active);
+  return (
+    <div className="flex items-center gap-1">
+      {steps.map((s, i) => (
+        <div key={s.key} className="flex items-center gap-1">
+          <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all ${
+            i < activeIdx ? "bg-blue-600 text-white" :
+            i === activeIdx ? "bg-blue-100 text-blue-600 ring-2 ring-blue-300" :
+            "bg-gray-100 text-gray-400"
+          }`}>
+            {i < activeIdx && <span>✓</span>}
+            {s.label}
+          </div>
+          {i < steps.length - 1 && <div className={`w-5 h-0.5 ${i < activeIdx ? "bg-blue-600" : "bg-gray-200"}`} />}
+        </div>
+      ))}
+>>>>>>> cf6c3ba117aebbffaff69a214ab9071a4e84e33d
     </div>
   );
 }

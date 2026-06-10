@@ -1,6 +1,9 @@
 "use client";
 import { CameraView } from "../CameraView";
+<<<<<<< HEAD
 import { CiRedo } from "react-icons/ci";
+=======
+>>>>>>> cf6c3ba117aebbffaff69a214ab9071a4e84e33d
 
 interface CameraSectionProps {
   cameraRef: any;
@@ -53,7 +56,11 @@ export const CameraSection = ({
         <button
           onClick={cameraPermission !== "granted" ? onRetryPermission : onCapture}
           disabled={isCapturing || !isOpenCVReady}
+<<<<<<< HEAD
           className={`px-5 py-2.5 rounded-full font-bold text-sm shadow-md transition-all active:scale-95 ${
+=======
+          className={`px-10 py-2.5 rounded-full font-bold text-sm shadow-md transition-all active:scale-95 ${
+>>>>>>> cf6c3ba117aebbffaff69a214ab9071a4e84e33d
             isCapturing || !isOpenCVReady
               ? "bg-gray-300 text-white cursor-not-allowed"
               : "bg-[#487ADB] text-white hover:bg-[#3E69BE]"
@@ -64,6 +71,7 @@ export const CameraSection = ({
             : isCapturing
             ? "⌛ Memproses..."
             : !isOpenCVReady
+<<<<<<< HEAD
             ? "⌛ Memuat OpenCV..."
             : (
                 <span className="flex items-center gap-2">
@@ -71,6 +79,10 @@ export const CameraSection = ({
                   Scan Ulang
                 </span>
               )}
+=======
+            ? "⌛ Memuat AI..."
+            : "📸 Scan Ulang"}
+>>>>>>> cf6c3ba117aebbffaff69a214ab9071a4e84e33d
         </button>
       </div>
     </div>
