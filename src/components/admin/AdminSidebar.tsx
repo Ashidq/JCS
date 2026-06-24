@@ -61,8 +61,8 @@ export default function AdminSidebar() {
                   className="w-5 h-5 object-contain flex-shrink-0"
                   style={
                     isActive
-                      ? { filter: "invert(36%) sepia(84%) saturate(1900%) hue-rotate(215deg) brightness(95%) contrast(93%)" }
-                      : { filter: "brightness(0) invert(1)" }
+                      ? { filter: "invert(45%) sepia(90%) saturate(1200%) hue-rotate(190deg) brightness(95%) contrast(90%)" }
+                      : {}
                   }
                 />
               ) : (
@@ -78,7 +78,7 @@ export default function AdminSidebar() {
       <div className="px-4 pb-6 mt-auto border-t border-blue-400/40 dark:border-slate-800 pt-4">
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl transition-all duration-200 text-red-300 hover:bg-red-500 hover:text-white font-medium text-sm border border-red-400/30 hover:border-transparent dark:text-red-400 dark:border-red-500/30 dark:hover:bg-red-600"
+          className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl transition-all duration-200 text-white hover:bg-red-500 hover:text-white font-medium text-sm border border-blue-100 hover:border-transparent dark:text-red-400 dark:border-red-500/30 dark:hover:bg-red-600"
         >
           <HiArrowRightOnRectangle className="w-5 h-5 flex-shrink-0" />
           Logout

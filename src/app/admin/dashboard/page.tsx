@@ -157,17 +157,18 @@ function LineChart({ data }: { data: ChartPoint[] }) {
   );
 }
 
-// ─── Donut Chart (SVG) ─────────────────────────────────────────────────────
-
 function DonutChart({ counts }: { counts: { valid: number; pending: number; invalid: number } }) {
-  const total = counts.valid + counts.pending + counts.invalid || 1;
+  const rawTotal = counts.valid + counts.pending + counts.invalid;
+  const total = rawTotal || 1;
+
   const segments = [
-    { pct: Math.round((counts.valid / total) * 100),   color: "#22c55e", label: "Valid" },
-    { pct: Math.round((counts.pending / total) * 100), color: "#4A81D4", label: "Pending" },
-    { pct: Math.round((counts.invalid / total) * 100), color: "#ef4444", label: "Invalid" },
+    { pct: (counts.valid / total) * 100, color: "#22c55e", label: "Valid" },
+    { pct: (counts.pending / total) * 100, color: "#4A81D4", label: "Pending" },
+    { pct: (counts.invalid / total) * 100, color: "#ef4444", label: "Invalid" },
   ];
 
-  const cx = 70, cy = 70, r = 55, innerR = 24;
+  const cx = 70, cy = 70, r = 56;
+  const innerR = r - 14;
   let startAngle = -90;
   const toRad = (deg: number) => (deg * Math.PI) / 180;
 
@@ -176,32 +177,49 @@ function DonutChart({ counts }: { counts: { valid: number; pending: number; inva
     const start = startAngle;
     const end = startAngle + angle;
     startAngle = end;
-    const x1 = cx + r * Math.cos(toRad(start)), y1 = cy + r * Math.sin(toRad(start));
-    const x2 = cx + r * Math.cos(toRad(end)),   y2 = cy + r * Math.sin(toRad(end));
-    const ix1 = cx + innerR * Math.cos(toRad(end)),   iy1 = cy + innerR * Math.sin(toRad(end));
-    const ix2 = cx + innerR * Math.cos(toRad(start)), iy2 = cy + innerR * Math.sin(toRad(start));
+
+    const x1 = cx + r * Math.cos(toRad(start));
+    const y1 = cy + r * Math.sin(toRad(start));
+    const x2 = cx + r * Math.cos(toRad(end));
+    const y2 = cy + r * Math.sin(toRad(end));
+
+    const ix1 = cx + innerR * Math.cos(toRad(end));
+    const iy1 = cy + innerR * Math.sin(toRad(end));
+    const ix2 = cx + innerR * Math.cos(toRad(start));
+    const iy2 = cy + innerR * Math.sin(toRad(start));
+
     const large = angle > 180 ? 1 : 0;
+
     return {
       d: `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${ix1} ${iy1} A ${innerR} ${innerR} 0 ${large} 0 ${ix2} ${iy2} Z`,
-      color: seg.color, label: seg.label, pct: seg.pct,
+      color: seg.color,
+      label: seg.label,
+      pct: seg.pct
     };
   });
 
-  const fontSize = Math.max(12, Math.min(20, 24 - String(total).length * 1.5));
+  const fontSize = Math.max(12, Math.min(20, 24 - String(rawTotal).length * 1.5));
 
   return (
     <div className="flex items-center gap-4 justify-center">
       <svg viewBox="0 0 140 140" className="w-36 h-36 flex-shrink-0">
         {arcs.map((arc, i) => <path key={i} d={arc.d} fill={arc.color} />)}
-        <text x={cx} y={cy - 4} textAnchor="middle" fill="#4A81D4" fontSize={fontSize} fontWeight="700">{total}</text>
-        <text x={cx} y={cy + 12} textAnchor="middle" fill="#94a3b8" fontSize="8">Total Orders</text>
+
+        <text x={cx} y={cy - 4} textAnchor="middle" fill="#4A81D4" fontSize={fontSize} fontWeight="800">
+          {rawTotal}
+        </text>
+
+        <text x={cx} y={cy + 12} textAnchor="middle" fill="#94a3b8" fontSize="10">
+          Total Orders
+        </text>
       </svg>
+
       <div className="space-y-2">
         {segments.map((s) => (
           <div key={s.label} className="flex items-center gap-2 text-sm">
             <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
             <span className="text-slate-600 dark:text-slate-300">{s.label}</span>
-            <span className="text-slate-400 dark:text-slate-500 text-xs">{s.pct}%</span>
+            <span className="text-slate-400 dark:text-slate-500 text-xs">{Math.round(s.pct)}%</span>
           </div>
         ))}
       </div>

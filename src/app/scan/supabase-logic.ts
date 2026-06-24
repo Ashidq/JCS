@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { validateTransactionDate } from "./ocr-logic";
 
 // ============================================================
 // INISIALISASI SUPABASE CLIENT
@@ -204,7 +205,8 @@ export const updateBuktiStatus = async (
 export const updateTransactionFromOCR = async (
   idBukti: number | string,
   amount: number,
-  merchantName: string | null
+  merchantName: string | null,
+  transactionDate?: Date | null
 ) => {
   // 1. Dapatkan id_transaksi dari bukti
   const { data: buktiData, error: buktiErr } = await supabase
@@ -219,9 +221,26 @@ export const updateTransactionFromOCR = async (
   }
 
   const isStrictMerchantValid = merchantName === "HMIT STORE ITS";
-  const validasiStatus = isStrictMerchantValid ? "Valid" : "Pending";
-  // Karena Check Constraint bukti_pembayaran menolak 'pending', kita set 'valid' hanya jika merchantName lengkap
-  const buktiStatus = isStrictMerchantValid ? "valid" : "invalid";
+
+  // Validasi selisih waktu maksimal 5 menit
+  const timeValidation = validateTransactionDate(transactionDate ?? null, 5);
+  const isTimeValid = timeValidation.isValid;
+
+  // Status Valid hanya jika merchant benar DAN waktu dalam 5 menit
+  let validasiStatus: "Valid" | "Pending" | "Invalid";
+  if (!isStrictMerchantValid) {
+    validasiStatus = "Pending";
+  } else if (transactionDate == null) {
+    // Tanggal tidak terbaca OCR → Pending, bisa scan ulang
+    validasiStatus = "Pending";
+  } else if (!isTimeValid) {
+    // Tanggal terbaca tapi > 5 menit → Invalid
+    validasiStatus = "Invalid";
+  } else {
+    validasiStatus = "Valid";
+  }
+
+  const buktiStatus = validasiStatus === "Valid" ? "valid" : "invalid";
 
   let idTransaksi = buktiData.id_transaksi;
 
@@ -268,6 +287,9 @@ export const updateTransactionFromOCR = async (
     }
   }
 
-  // 3. Update status bukti_pembayaran sesuai aturan baru
+  // 3. Update status bukti_pembayaran
   await updateBuktiStatus(idBukti, buktiStatus);
+
+  return { validasiStatus, timeValidation };
 };
+

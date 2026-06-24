@@ -3,24 +3,24 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState, useEffect, useCallback } from "react";
 import Image from "next/image";
+import { memo } from "react";
 import Footer from "../../components/layout/Footer";
 import { CameraSection } from "./components/CameraSection";
 import { getPublicImageUrl } from "./supabase-logic";
 import { VscServerProcess } from "react-icons/vsc";
 import { TbLineScan } from "react-icons/tb";
 import { AiOutlineFileDone } from "react-icons/ai";
-import MascotScan from "../../components/ui/Mascot_Scan";
 
 
 // ============================================================
-// HELPERS — tidak diubah
+// HELPERS
 // ============================================================
 const API_URL = () => process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 const resetCaptureLock = () =>
   fetch(`${API_URL()}/reset-capture`, { method: "POST" }).catch(() => {});
 
 // ============================================================
-// TYPES — tidak diubah
+// TYPES
 // ============================================================
 interface PreviewData {
   id_bukti: string;
@@ -32,15 +32,11 @@ interface PreviewData {
 // ============================================================
 // SUB-COMPONENTS
 // ============================================================
-function PageStepper({
-  active,
-}: {
-  active: "scan" | "proses" | "hasil";
-}) {
+function PageStepper({ active }: { active: "scan" | "proses" | "hasil" }) {
   const steps = [
-    { key: "scan",label: "Scan", icon: TbLineScan},
-    { key: "proses",label: "Proses",icon: VscServerProcess },
-    { key: "hasil",label: "Hasil",icon: AiOutlineFileDone },
+    { key: "scan",   label: "Scan",   icon: TbLineScan },
+    { key: "proses", label: "Proses", icon: VscServerProcess },
+    { key: "hasil",  label: "Hasil",  icon: AiOutlineFileDone },
   ];
 
   const activeIdx = steps.findIndex((s) => s.key === active);
@@ -48,20 +44,17 @@ function PageStepper({
   return (
     <div className="flex items-center justify-center">
       {steps.map((step, i) => {
-        const Icon = step.icon;
-
-        const isActive = i === activeIdx;
+        const Icon        = step.icon;
+        const isActive    = i === activeIdx;
         const isCompleted = i < activeIdx;
 
         return (
-          <div
-            key={step.key}
-            className="flex items-center"
-          >
-            <div className="flex-col items-center">
+          <div key={step.key} className="flex items-center">
+
+            <div className="flex flex-col items-center">
               <div
                 className={`
-                  w-10 h-10 rounded-full
+                  w-8 h-8 rounded-full
                   flex items-center justify-center
                   border-2 transition-all
                   ${
@@ -73,23 +66,118 @@ function PageStepper({
                   }
                 `}
               >
-                <Icon size={18} />
+                {isCompleted ? (
+                  /* ✅ Centang putih, tanpa dot */
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="white"
+                    strokeWidth={3}
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                ) : (
+                  <Icon size={18} />
+                )}
               </div>
 
-              <span className={`text-sm font-semibold ${ isActive || isCompleted ? "text-blue-600" : "text-gray-400" } `}>
+              <span
+                className={`text-xs font-semibold mt-1 ${
+                  isActive || isCompleted ? "text-blue-600" : "text-gray-400"
+                }`}
+              >
                 {step.label}
               </span>
             </div>
 
             {i < steps.length - 1 && (
-              <div className={`w-24 h-[2px] mb-6 ${i < activeIdx ? "bg-blue-500" : "bg-gray-300" } `} />
+              <div
+                className={`w-16 h-[2px] mb-5 mx-1 ${
+                  i < activeIdx ? "bg-blue-500" : "bg-gray-300"
+                }`}
+              />
             )}
+
           </div>
         );
       })}
     </div>
   );
 }
+
+const RobotMascot = memo(function RobotMascot() {
+  return (
+    <div className="select-none inline-flex flex-col items-center">
+      <svg viewBox="0 0 680 520" xmlns="http://www.w3.org/2000/svg" className="w-24 sm:w-32 lg:w-48 h-auto">
+        <style>{`
+          @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+          @keyframes blink{0%,90%,100%{opacity:1}95%{opacity:0}}
+          @keyframes pulse{0%,100%{r:4}50%{r:5.5}}
+          @keyframes scanLine{0%{transform:translateY(0);opacity:.3}50%{transform:translateY(48px);opacity:1}100%{transform:translateY(0);opacity:.3}}
+          .float{animation:float 2s ease-in-out infinite;transform-origin:340px 260px}
+          .cursor{animation:blink 2.4s infinite}
+          .dot-g{animation:pulse 2s infinite}
+          .dot-y{animation:pulse 2.3s infinite}
+          .scanLine{animation:scanLine 2s ease-in-out infinite}
+        `}</style>
+
+        <g className="float">
+          <ellipse cx="435" cy="490" rx="80" ry="12" fill="#c8dcee" opacity="0.5"/>
+
+          <rect x="372" y="310" width="136" height="100" rx="36" fill="#dbeafe"/>
+          <rect x="372" y="310" width="136" height="100" rx="36" fill="none" stroke="#bfdbfe" strokeWidth="1.5"/>
+          <rect x="396" y="330" width="88" height="58" rx="14" fill="#bfdbfe"/>
+
+          <circle cx="418" cy="349" r="7" fill="#60a5fa"/><circle cx="418" cy="349" r="4" fill="#93c5fd"/>
+          <circle cx="440" cy="349" r="7" fill="#34d399"/><circle cx="440" cy="349" r="4" fill="#6ee7b7"/>
+          <circle cx="462" cy="349" r="7" fill="#f472b6"/><circle cx="462" cy="349" r="4" fill="#f9a8d4"/>
+          <rect x="405" y="367" width="70" height="8" rx="4" fill="#93c5fd"/>
+          <rect x="405" y="367" width="23" height="8" rx="4" fill="#676b6e" />
+
+          <rect x="325" y="316" width="38" height="90" rx="19" fill="#bee3f8" stroke="#bfdbfe"/>
+          <ellipse cx="345" cy="408" rx="18" ry="14" fill="#93c5fd"/>
+
+          <rect x="518" y="316" width="38" height="90" rx="19" fill="#bee3f8" stroke="#bfdbfe"/>
+          <ellipse cx="537" cy="408" rx="18" ry="14" fill="#93c5fd"/>
+
+          <rect x="340" y="160" width="200" height="152" rx="52" fill="#dbeafe"/>
+          <rect x="340" y="160" width="200" height="152" rx="52" fill="none" stroke="#bfdbfe" strokeWidth="2"/>
+
+          <rect x="322" y="210" width="30" height="50" rx="20" fill="#93c5fd" stroke="#bfdbfe"/>
+          <rect x="527" y="210" width="30" height="50" rx="20" fill="#93c5fd" stroke="#bfdbfe"/>
+
+          <rect x="372" y="188" width="136" height="88" rx="24" fill="#0f172a"/>
+          <rect x="372" y="188" width="136" height="88" rx="24" fill="none" stroke="#1e40af" strokeWidth="1.5"/>
+
+          <rect x="382" y="205" width="116" height="2" fill="#22d3ee" opacity="0.9" className="scanLine"/>
+
+          <text x="390" y="225" fontFamily="monospace" fontSize="14" fill="#4ade80" fontWeight="bold">
+            {`>SCANNING`}
+          </text>
+
+          <rect x="390" y="235" width="8" height="14" rx="1" fill="#4ade80" className="cursor"/>
+
+          <text x="390" y="265" fontFamily="monospace" fontSize="9" fill="#22d3ee">
+            Camera Active...
+          </text>
+
+          <line x1="394" y1="164" x2="376" y2="118" stroke="#93c5fd" strokeWidth="3" strokeLinecap="round"/>
+          <circle cx="374" cy="110" r="12" fill="#d1fae5" stroke="#6ee7b7" strokeWidth="2"/>
+          <circle cx="374" cy="110" r="4" fill="#10b981" className="dot-g"/>
+
+          <line x1="486" y1="164" x2="504" y2="118" stroke="#93c5fd" strokeWidth="3" strokeLinecap="round"/>
+          <circle cx="506" cy="110" r="12" fill="#fef9c3" stroke="#fde047" strokeWidth="2"/>
+          <circle cx="506" cy="110" r="4" fill="#eab308" className="dot-y"/>
+        </g>
+      </svg>
+    </div>
+  );
+});
 
 // ============================================================
 // PAGE
@@ -98,25 +186,30 @@ export default function ScanPage() {
   const router = useRouter();
   const cameraRef = useRef<any>(null);
 
-  // ── SEMUA STATE & LOGIKA DIPERTAHANKAN ──
-  const [isCapturing, setIsCapturing] = useState(false);
-  const isCapturingRef = useRef(false);
+  // ── STATE & LOGIKA ──
+  const [isCapturing, setIsCapturing]       = useState(false);
+  const isCapturingRef                       = useRef(false);
 
   const setIsCapturingSync = useCallback((val: boolean) => {
     isCapturingRef.current = val;
     setIsCapturing(val);
   }, []);
 
-  const [isOpenCVReady, setIsOpenCVReady] = useState(false);
-  const [status, setStatus] = useState("Menyiapkan Engine OpenCV");
-  const [cameraPermission, setCameraPermission] = useState<"checking" | "granted" | "denied">("checking");
-  const [previewData, setPreviewData] = useState<PreviewData | null>(null);
+  const [isOpenCVReady, setIsOpenCVReady]   = useState(false);
+  const [status, setStatus]                 = useState("Menyiapkan OpenCV");
+  const [cameraPermission, setCameraPermission] = useState<
+    "checking" | "granted" | "denied"
+  >("checking");
+  const [previewData, setPreviewData]       = useState<PreviewData | null>(null);
+
 
   useEffect(() => { resetCaptureLock(); }, []);
 
   const requestCamera = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+      });
       stream.getTracks().forEach((t) => t.stop());
       setCameraPermission("granted");
       return true;
@@ -127,7 +220,11 @@ export default function ScanPage() {
     }
   }, []);
 
-  useEffect(() => { requestCamera(); }, []);
+  useEffect(() => { requestCamera(); }, [requestCamera]);
+
+  useEffect(() => {
+    console.log("🔄 [ScanPage] previewData changed:", previewData);
+  }, [previewData]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -140,17 +237,34 @@ export default function ScanPage() {
     return () => clearInterval(interval);
   }, [cameraPermission]);
 
-  const handleBackendResponse = useCallback(async (backendData: any) => {
-    if (!backendData || !backendData.success) return;
-    if (isCapturingRef.current) return;
-    setIsCapturingSync(true);
-    const { id_bukti, file_path, public_url } = backendData;
-    if (!file_path || !id_bukti) { setIsCapturingSync(false); return; }
-    const cleanFilePath = (file_path as string).replace(/^\/+/, "");
-    const imageUrl = public_url || getPublicImageUrl(cleanFilePath);
-    setPreviewData({ id_bukti: String(id_bukti), file_path: cleanFilePath, public_url: public_url ?? "", imageUrl });
-    setStatus("Foto berhasil diambil");
-  }, [setIsCapturingSync]);
+  const handleBackendResponse = useCallback(
+    async (backendData: any) => {
+      console.log("🧠 [handleBackendResponse] input:", backendData);
+      if (!backendData || !backendData.success) return;
+      if (isCapturingRef.current) return;
+
+      const { id_bukti, file_path, public_url } = backendData;
+      if (!file_path || !id_bukti) return;
+
+      const cleanFilePath = (file_path as string).replace(/^\/+/, "");
+      const imageUrl = public_url || getPublicImageUrl(cleanFilePath);
+
+      // set preview first so UI switches immediately
+      setPreviewData({
+        id_bukti: String(id_bukti),
+        file_path: cleanFilePath,
+        public_url: public_url ?? "",
+        imageUrl,
+      });
+
+
+
+      // stop capturing so the scan button/loop doesn't override UI
+      setIsCapturingSync(false);
+      setStatus("Foto berhasil diambil");
+    },
+    [setIsCapturingSync],
+  );
 
   const handleRetake = useCallback(() => {
     setPreviewData(null);
@@ -162,18 +276,22 @@ export default function ScanPage() {
   const handleProceed = useCallback(() => {
     if (!previewData) return;
     const params = new URLSearchParams({
-      id_bukti: previewData.id_bukti,
-      file_path: previewData.file_path,
+      id_bukti:   previewData.id_bukti,
+      file_path:  previewData.file_path,
       public_url: previewData.public_url,
     });
     router.push(`/proses?${params.toString()}`);
   }, [previewData, router]);
 
+  // Tombol Scan berfungsi untuk capture manual.
+  // Mengirim blob hasil capture ke backend (/capture-payment), lalu memanggil handleBackendResponse.
+  // Tombol ini sengaja dibuat TIDAK melakukan capture manual.
+  // Capture dilakukan oleh pipeline auto-capture (Python/backend) melalui onAutoCapture.
   const onCapture = useCallback(() => {}, []);
-  const onBack = useCallback(() => router.back(), [router]);
+
+  const onBack    = useCallback(() => router.back(), [router]);
 
   // ============================================================
-  // RENDER===========================================================
   // RENDER
   // ============================================================
   return (
@@ -184,11 +302,21 @@ export default function ScanPage() {
         <div className="max-w-7xl mx-auto px-5 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden">
-              <Image src="/logo.png" alt="Logo Jujurly" width={15} height={20} className="object-contain"/>
+              <Image
+                src="/logo.png"
+                alt="Logo Jujurly"
+                width={15}
+                height={20}
+                className="object-contain"
+              />
             </div>
-            <span className="font-bold text-[#2B4C7E] text-base sm:text-lg">Jujurly Canteen System</span>
+            <span className="font-bold text-[#2B4C7E] text-base sm:text-lg">
+              Jujurly Canteen System
+            </span>
           </div>
+
           <PageStepper active="scan" />
+
           <span className="text-xs sm:text-sm font-bold text-[#2B4C7E]">
             KWU <span className="text-yellow-400">●</span> HMIT
           </span>
@@ -216,7 +344,7 @@ export default function ScanPage() {
                   className="w-full h-full object-cover"
                 />
               </div>
-              <div className="flex items-center gap-2 bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-full shadow">
+              <div className="flex items-center gap-2 bg-green-500 text-white text-xs font-bold px-4 py-2 rounded-full shadow">
                 <div className="w-2 h-2 bg-white rounded-full" />
                 Gambar berhasil ditangkap
               </div>
@@ -225,11 +353,9 @@ export default function ScanPage() {
             {/* Kolom kanan — konfirmasi */}
             <div className="flex flex-col gap-6">
               <div>
-                <span className="inline-flex items-center gap-1.5 bg-blue-100 text-blue-600 text-xs font-bold px-3 py-1.5 rounded-full">
-                  <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
-                  Konfirmasi Foto
-                </span>
-                <h2 className="text-2xl font-black text-blue-900 mt-2">Periksa Kualitas Gambar</h2>
+                <h2 className="text-2xl font-black text-blue-900 mt-2">
+                  Periksa Kualitas Gambar
+                </h2>
                 <p className="text-sm text-gray-400 mt-1">
                   Pastikan teks nominal dan nama merchant terlihat jelas sebelum melanjutkan.
                 </p>
@@ -260,52 +386,69 @@ export default function ScanPage() {
           </div>
 
         ) : (
+
           /* ================================================
            * MODE A: KAMERA AKTIF
            * ============================================== */
-          <div className="w-full max-w-5xl grid lg:grid-cols-[1fr_280px] gap-16 items-start">
+          <div className="w-full max-w-5xl grid lg:grid-cols-[1fr_500px] gap-15 items-center">
 
             {/* Kolom kiri — camera frame */}
-            <div className="flex flex-col">
-
-              {/* Camera frame */}
+            <div className="flex flex-col justify-center lg:ml-30">
               <div className="relative rounded-3xl overflow-hidden shadow-xl">
-                {/* Corner accents */}
                 <CameraSection
                   cameraRef={cameraRef}
                   status={status}
                   isCapturing={isCapturing}
                   isOpenCVReady={isOpenCVReady}
                   cameraPermission={cameraPermission}
+                  onCapture={onCapture}
                   onAutoCapture={handleBackendResponse}
                   onRetryPermission={requestCamera}
+                  onBack={onBack}
                 />
               </div>
             </div>
 
             {/* Kolom kanan — panduan */}
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col justify-center gap-5">
               <div>
-                <span className="inline-flex items-center gap-1.5 bg-blue-100 text-blue-600 text-xs font-bold px-3 py-1.5 rounded-full">
-                  <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
-                  Scanning aktif
-                </span>
-                <h2 className="text-xl font-black text-blue-900 mt-2">Pindai Bukti Pembayaran</h2>
+                <h2 className="text-2xl font-black text-blue-900 mt-2">
+                  Pindai Bukti Pembayaran
+                </h2>
               </div>
 
               {/* Langkah vertikal minimalis */}
               <div className="flex flex-col">
                 {[
-                  { n: 1, title: "Dekatkan Struk QRIS ke Kamera",    desc: "Arahkan kamera ke struk bukti pembayaran" },
-                  { n: 2, title: "Jaga Posisi Tetap Stabil",          desc: "Tahan agar gambar tidak buram" },
-                  { n: 3, title: "Sistem Akan Menangkap Gambar Otomatis", desc: "Tunggu hingga auto-capture berjalan" },
+                  {
+                    n: 1,
+                    title: "Dekatkan Bukti Struk ke Kamera",
+                    desc: "Arahkan kamera ke struk bukti pembayaran",
+                  },
+                  {
+                    n: 2,
+                    title: "Pastikan Pencahayaan Cukup dan Stabil",
+                    desc: "Atur pencahayaan agar tidak terlalu gelap atau terang",
+                  },
+                  {
+                    n: 3,
+                    title: "Jaga Posisi Tetap Stabil",
+                    desc: "Tahan agar gambar tidak buram",
+                  },
+                  {
+                    n: 4,
+                    title: "Sistem Akan Menangkap Gambar Otomatis",
+                    desc: "Tunggu hingga auto-capture berjalan",
+                  },
                 ].map((step, idx) => (
                   <div key={step.n} className="flex gap-3">
                     <div className="flex flex-col items-center">
                       <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-black shrink-0">
                         {step.n}
                       </div>
-                      {idx < 2 && <div className="w-0.5 h-8 bg-blue-200 mt-1" />}
+                      {idx < 3 && (
+                        <div className="w-0.5 h-8 bg-blue-200 mt-1" />
+                      )}
                     </div>
                     <div className="pb-5">
                       <p className="text-sm font-bold text-blue-900">{step.title}</p>
@@ -318,11 +461,13 @@ export default function ScanPage() {
               {/* Engine status */}
               <div className="flex items-center justify-between py-3 border-t border-gray-100">
                 <span className="text-xs text-gray-400">System Engine</span>
-                <div className={`px-2.5 py-1 rounded-full text-[10px] font-black border ${
-                  isOpenCVReady
-                    ? "bg-emerald-50 text-emerald-600 border-emerald-100"
-                    : "bg-yellow-50 text-yellow-600 border-yellow-100 animate-pulse"
-                }`}>
+                <div
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-black border ${
+                    isOpenCVReady
+                      ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+                      : "bg-yellow-50 text-yellow-600 border-yellow-100 animate-pulse"
+                  }`}
+                >
                   {isOpenCVReady ? "● ACTIVE" : "○ LOADING"}
                 </div>
               </div>
@@ -333,8 +478,8 @@ export default function ScanPage() {
       </main>
 
       {/* MASKOT — fixed pojok kanan bawah */}
-      <div className="fixed bottom-20 right-6 z-40">
-        <MascotScan />
+      <div className="hidden sm:block fixed bottom-15 right-0 lg:right-0 z-40 pointer-events-none">
+        <RobotMascot mood={previewData ? "focus" : "scan"} />
       </div>
 
       <footer className="fixed bottom-0 left-0 w-full z-50">

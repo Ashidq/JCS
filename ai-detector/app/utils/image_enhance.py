@@ -1,26 +1,29 @@
 import cv2
+import numpy as np
 
 
-def enhance_image(image):
-    """
-    Pipeline Enhancement OCR-Optimized (Sprint 2 - SKPL-NF-010).
-
-    Tidak menggunakan filter berat (fastNlMeans, CLAHE, GaussianBlur besar)
-    agar karakter teks tidak rusak untuk OCR di Next.js.
-
-    Hanya melakukan resize dengan INTER_AREA:
-    1. Ukuran file kecil → upload cepat (SKPL-NF-002)
-    2. Karakter teks tetap tajam → akurasi OCR terjaga (SKPL-NF-003)
-    """
+def enhance_image(image: np.ndarray) -> np.ndarray:
     h, w = image.shape[:2]
-    MAX_WIDTH = 1024
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    if w > MAX_WIDTH:
-        ratio = MAX_WIDTH / w
-        new_w = MAX_WIDTH
-        new_h = int(h * ratio)
-        # cv2.INTER_AREA: algoritma resize terbaik agar teks tidak pecah
-        image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
-        print(f"[enhance_image] Resize: {w}x{h} → {new_w}x{new_h}")
+    # Gambar screenshot e-wallet: mean >200, noise <200 Laplacian
+    # Tidak perlu CLAHE atau unsharp agresif — hanya pertajam ringan
+    blurred = cv2.GaussianBlur(gray, (0, 0), 1.0)
+    sharpened = cv2.addWeighted(gray, 1.2, blurred, -0.2, 0)
 
-    return image
+    # blockSize=21 C=8 — lebih stabil untuk background putih luas
+    binarized = cv2.adaptiveThreshold(
+        sharpened, 255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        21, 8   # ← sebelumnya 13, 4
+    )
+
+    # INTER_NEAREST untuk gambar biner (bukan INTER_CUBIC)
+    if w < 900:
+        binarized = cv2.resize(
+            binarized, (w * 2, h * 2),
+            interpolation=cv2.INTER_NEAREST  # ← sebelumnya INTER_CUBIC
+        )
+
+    return cv2.cvtColor(binarized, cv2.COLOR_GRAY2BGR)

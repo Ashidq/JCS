@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Image from "next/image";
 import { supabase, getPublicImageUrl } from "../../scan/supabase-logic";
 import {
   HiMagnifyingGlass,
@@ -98,17 +97,12 @@ function DetailModal({ tx, onClose }: { tx: Transaksi; onClose: () => void }) {
         </div>
         <div className="px-6 pb-6">
           <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">Bukti Pembayaran</p>
-          <div className="rounded-xl border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 overflow-hidden min-h-[160px] max-h-72 flex items-center justify-center relative">
+          <div className="rounded-xl border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 overflow-hidden min-h-[160px] flex items-center justify-center">
             {loadingImg ? (
               <p className="text-slate-400 text-sm">Memuat gambar...</p>
             ) : imageUrl ? (
-              <Image
-                src={imageUrl}
-                alt="Bukti pembayaran"
-                fill
-                className="object-contain"
-                sizes="(max-width: 768px) 100vw, 448px"
-              />
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={imageUrl} alt="Bukti pembayaran" className="w-full max-h-72 object-contain" />
             ) : (
               <div className="flex flex-col items-center gap-2 py-8 text-slate-400 dark:text-slate-500">
                 <HiPhoto className="text-3xl" />
