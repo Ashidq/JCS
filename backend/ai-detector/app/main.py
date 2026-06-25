@@ -9,7 +9,7 @@ app = FastAPI(
 )
 
 FRONTEND_URL = os.getenv(
-    "FRONTEND_URL",
+    "https://jcs-tau.vercel.app",
     "http://localhost:3000"
 )
 
