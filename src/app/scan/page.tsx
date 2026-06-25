@@ -370,7 +370,7 @@ export default function ScanPage() {
 
       {/* MASKOT — fixed pojok kanan bawah */}
       <div className="hidden sm:block fixed bottom-15 right-0 lg:right-0 z-40 pointer-events-none">
-        <RobotMascot mood={previewData ? "focus" : "scan"} />
+        <RobotMascot/>
       </div>
 
       <footer className="fixed bottom-0 left-0 w-full z-50">
