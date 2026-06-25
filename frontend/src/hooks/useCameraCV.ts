@@ -6,8 +6,7 @@ import { sendFrameToAPI } from "./useFrameSender";
 import { useStability } from "./useStability";
 
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  "https://jujurly-ai-detector.onrender.com";
+  process.env.NEXT_PUBLIC_API_URL || "https://jcs-y6jp.onrender.com";
 
 interface PhoneBox {
   x: number;

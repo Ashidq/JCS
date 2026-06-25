@@ -11,7 +11,7 @@ import { getPublicImageUrl } from "./supabase-logic";
 // ============================================================
 // HELPERS
 // ============================================================
-const API_URL = () => process.env.NEXT_PUBLIC_API_URL || "https://jujurly-ai-detector.onrender.com";
+const API_URL = () => process.env.NEXT_PUBLIC_API_URL || "https://jcs-y6jp.onrender.com";
 const resetCaptureLock = () =>
   fetch(`${API_URL()}/reset-capture`, { method: "POST" }).catch(() => {});
 

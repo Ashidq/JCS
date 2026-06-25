@@ -1,8 +1,7 @@
 "use client";
 
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  "https://jujurly-ai-detector.onrender.com";
+  process.env.NEXT_PUBLIC_API_URL ||"https://jcs-y6jp.onrender.com";
 
 /**
  * Mengirim frame kamera ke backend Python (FastAPI) untuk deteksi layar HP.
