@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "../../scan/supabase-logic";
 import { useTheme } from "next-themes";
 import {
   HiComputerDesktop,
@@ -123,41 +124,57 @@ export default function SettingsPage() {
   useEffect(() => setMounted(true), []);
 
   // Sessions — real data dari Supabase
-  const [sessions, setSessions] = useState<AdminSession[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(true);
-  const [currentToken, setCurrentToken] = useState<string | null>(null);
+  const [sessions,setSessions]=useState<AdminSession[]>([]);
+  const [currentToken,setCurrentToken]=useState<string|null>(null);
+  const [currentEmail,setCurrentEmail]=useState<string|null>(null);
+  const [sessionsLoading,setSessionsLoading]=useState(false);
 
-  const fetchSessions = useCallback(async (username: string) => {
+  const fetchSessions=useCallback(async(email:string)=>{
     setSessionsLoading(true);
-    const result = await getAdminSessions(username);
-    if (result.success && result.data) setSessions(result.data);
+
+    const result=await getAdminSessions(email);
+
+    if(result.success&&result.data){
+      setSessions(result.data);
+    }else{
+      setSessions([]);
+    }
+
     setSessionsLoading(false);
-  }, []);
+  },[]);
 
-  useEffect(() => {
-    const username = localStorage.getItem("admin_session");
-    const token = localStorage.getItem("admin_session_token");
-    setCurrentToken(token);
-    if (username) fetchSessions(username);
-  }, [fetchSessions]);
 
-  const handleLogoutDevice = async (token: string) => {
-    const result = await deleteAdminSession(token);
-    if (!result.success) {
-      showToast(result.error ?? "Gagal menghapus sesi.", "error");
+  useEffect(()=>{
+    const loadSession=async()=>{
+      const {data:{session}}=await supabase.auth.getSession();
+
+      if(!session?.user?.email)return;
+
+      setCurrentToken(session.access_token);
+      setCurrentEmail(session.user.email);
+
+      await fetchSessions(session.user.email);
+    };
+
+    loadSession();
+  },[fetchSessions]);
+
+  const handleLogoutDevice=async(token:string)=>{
+    const result=await deleteAdminSession(token);
+
+    if(!result.success){
+      showToast(result.error??"Gagal menghapus sesi.","error");
       return;
     }
 
-    // Jika yang dihapus adalah sesi perangkat ini sendiri → paksa logout
-    if (token === currentToken) {
-      localStorage.removeItem("admin_session");
-      localStorage.removeItem("admin_session_token");
-      router.push("/admin/login");
+    if(token===currentToken){
+      await supabase.auth.signOut();
+      window.location.href="/admin/login";
       return;
     }
 
-    setSessions((prev) => prev.filter((s) => s.token !== token));
-    showToast("Sesi perangkat berhasil dihapus.", "success");
+    setSessions(prev=>prev.filter(s=>s.token!==token));
+    showToast("Sesi perangkat berhasil dihapus.","success");
   };
 
   // Data Management

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { supabase } from "../../app/scan/supabase-logic";
 import { usePathname, useRouter } from "next/navigation";
 import {
   HiHome,
@@ -20,10 +21,26 @@ export default function AdminSidebar() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const handleLogout = () => {
-    if (window.confirm("Apakah Anda yakin ingin keluar?")) {
-      localStorage.removeItem("admin_session");
-      router.push("/admin/login");
+  const handleLogout=async()=>{
+    if(!window.confirm("Apakah Anda yakin ingin keluar?"))return;
+
+    try{
+      const {data:{session}}=await supabase.auth.getSession();
+
+      if(session?.access_token){
+        await supabase
+          .from("admin_sessions")
+          .delete()
+          .eq("token",session.access_token);
+      }
+
+      const {error}=await supabase.auth.signOut();
+
+      if(error)throw error;
+
+      window.location.href="/admin/login";
+
+    }catch(err){
     }
   };
 

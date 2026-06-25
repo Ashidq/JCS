@@ -1,137 +1,192 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { createClient } from "@supabase/supabase-js";
+import {revalidatePath} from "next/cache";
+import {cookies} from "next/headers";
+import {createServerClient} from "@supabase/ssr";
 
-// Supabase instance untuk server-side (anon key, sama permission dengan client)
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+async function getSupabase(){
+  const cookieStore=await cookies();
 
-// ─── Action: Hapus Cache Next.js ──────────────────────────────────────────
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies:{
+        getAll(){
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet){
+          try{
+            cookiesToSet.forEach(({name,value,options})=>{
+              cookieStore.set(name,value,options);
+            });
+          }catch{}
+        }
+      }
+    }
+  );
+}
 
-export async function clearAppCache(): Promise<{ success: boolean; error?: string }> {
-  try {
-    revalidatePath("/", "layout");
-    return { success: true };
-  } catch (err: unknown) {
+// ================= CACHE =================
+
+export async function clearAppCache():Promise<{success:boolean;error?:string}>{
+  try{
+    revalidatePath("/","layout");
+    return {success:true};
+  }catch(err:unknown){
     return {
-      success: false,
-      error: err instanceof Error ? err.message : "Gagal me-revalidate cache.",
+      success:false,
+      error:err instanceof Error?err.message:"Gagal clear cache."
     };
   }
 }
 
-// ─── Action: Toggle Maintenance Mode ─────────────────────────────────────
+// ================= MAINTENANCE =================
 
 export async function toggleMaintenanceMode(
-  status: boolean
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const { error } = await supabase
+  status:boolean
+):Promise<{success:boolean;error?:string}>{
+  try{
+    const supabase=await getSupabase();
+
+    const {error}=await supabase
       .from("global_settings")
-      .update({ is_maintenance: status })
-      .eq("id", 1);
+      .update({is_maintenance:status})
+      .eq("id",1);
 
-    if (error) throw error;
-    return { success: true };
-  } catch (err: unknown) {
+    if(error)throw error;
+
+    return {success:true};
+
+  }catch(err:unknown){
     return {
-      success: false,
-      error: err instanceof Error ? err.message : "Gagal memperbarui maintenance mode.",
+      success:false,
+      error:err instanceof Error?err.message:"Gagal update maintenance."
     };
   }
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────
 
-export interface AdminSession {
-  id: string;
-  username: string;
-  token: string;
-  user_agent: string | null;
-  created_at: string;
-  last_active: string;
+// ================= SESSION =================
+
+export interface AdminSession{
+  id:number;
+  user_id:string;
+  email:string;
+  token:string;
+  user_agent:string|null;
+  created_at:string;
+  last_active:string;
 }
 
-// ─── Action: Catat sesi login baru ───────────────────────────────────────
 
-export async function createAdminSession(data: {
-  username: string;
-  token: string;
-  userAgent: string;
-}): Promise<{ success: boolean; error?: string }> {
-  try {
-    const { error } = await supabase.from("admin_sessions").insert([{
-      username: data.username,
-      token: data.token,
-      user_agent: data.userAgent,
-    }]);
-    if (error) throw error;
-    return { success: true };
-  } catch (err: unknown) {
+// CREATE SESSION
+
+export async function createAdminSession(data:{
+  user_id:string;
+  email:string;
+  token:string;
+  userAgent:string;
+}):Promise<{success:boolean;error?:string}>{
+
+  try{
+    const supabase=await getSupabase();
+
+    const {error}=await supabase
+      .from("admin_sessions")
+      .insert({
+        user_id:data.user_id,
+        email:data.email,
+        token:data.token,
+        user_agent:data.userAgent,
+        last_active:new Date().toISOString()
+      });
+
+    if(error)throw error;
+
+    return {success:true};
+
+  }catch(err:unknown){
     return {
-      success: false,
-      error: err instanceof Error ? err.message : "Gagal mencatat sesi.",
+      success:false,
+      error:err instanceof Error?err.message:"Gagal membuat session."
     };
   }
 }
 
-// ─── Action: Ambil semua sesi aktif ──────────────────────────────────────
+
+// GET SESSION
 
 export async function getAdminSessions(
-  username: string
-): Promise<{ success: boolean; data?: AdminSession[]; error?: string }> {
-  try {
-    const { data, error } = await supabase
+  email:string
+):Promise<{success:boolean;data?:AdminSession[];error?:string}>{
+
+  try{
+    const supabase=await getSupabase();
+
+    const {data,error}=await supabase
       .from("admin_sessions")
-      .select("id, username, token, user_agent, created_at, last_active")
-      .eq("username", username)
-      .order("last_active", { ascending: false });
-    if (error) throw error;
-    return { success: true, data: (data as AdminSession[]) ?? [] };
-  } catch (err: unknown) {
+      .select(`
+        id,
+        user_id,
+        email,
+        token,
+        user_agent,
+        created_at,
+        last_active
+      `)
+      .eq("email",email)
+      .order("last_active",{ascending:false});
+
+
+    if(error)throw error;
+
+
     return {
-      success: false,
-      error: err instanceof Error ? err.message : "Gagal mengambil data sesi.",
+      success:true,
+      data:(data as AdminSession[])??[]
     };
+
+
+  }catch(err:unknown){
+
+    return {
+      success:false,
+      error:err instanceof Error?err.message:"Gagal mengambil session."
+    };
+
   }
 }
 
-// ─── Action: Hapus sesi berdasarkan token ────────────────────────────────
+
+// DELETE SESSION
 
 export async function deleteAdminSession(
-  token: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const { error } = await supabase
+  token:string
+):Promise<{success:boolean;error?:string}>{
+
+  try{
+
+    const supabase=await getSupabase();
+
+    const {error}=await supabase
       .from("admin_sessions")
       .delete()
-      .eq("token", token);
-    if (error) throw error;
-    return { success: true };
-  } catch (err: unknown) {
+      .eq("token",token);
+
+
+    if(error)throw error;
+
+
+    return {success:true};
+
+
+  }catch(err:unknown){
+
     return {
-      success: false,
-      error: err instanceof Error ? err.message : "Gagal menghapus sesi.",
+      success:false,
+      error:err instanceof Error?err.message:"Gagal menghapus session."
     };
-  }
-}
 
-// ─── Action: Verifikasi token sesi ───────────────────────────────────────
-
-export async function verifyAdminSession(token: string): Promise<boolean> {
-  try {
-    const { data, error } = await supabase
-      .from("admin_sessions")
-      .select("id")
-      .eq("token", token)
-      .maybeSingle();
-
-    if (error) return true; // fallback: error DB → jangan kick admin
-    return data !== null;   // token ada → valid, null → sudah dihapus
-  } catch {
-    return true; // fallback: network/timeout → jangan kick admin
   }
 }

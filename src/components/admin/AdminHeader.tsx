@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "../../app/scan/supabase-logic";
 import { HiUser, HiPencilSquare, HiChevronDown, HiXMark } from "react-icons/hi2";
 import NotifBell from "../ui/NotifBell";
@@ -9,18 +8,21 @@ import NotifBell from "../ui/NotifBell";
 // ─── Edit Profil Modal ─────────────────────────────────────────────────────
 
 function EditProfilModal({
-  currentUsername,
+  currentEmail,
+  currentDisplayName,
   onClose,
   onSaved,
 }: {
-  currentUsername: string;
+  currentEmail: string;
+  currentDisplayName: string;
   onClose: () => void;
-  onSaved: (newUsername: string) => void;
+  onSaved: (newName: string) => void;
 }) {
-  const [username, setUsername] = useState(currentUsername);
-  const [password, setPassword] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [displayName, setDisplayName] = useState(currentDisplayName);
+  const [password, setPassword]       = useState("");
+  const [saving, setSaving]           = useState(false);
+  const [error, setError]             = useState("");
+  const [success, setSuccess]         = useState("");
 
   const inputCls =
     "w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#4A81D4]/30 focus:border-[#4A81D4] transition bg-white";
@@ -28,27 +30,26 @@ function EditProfilModal({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setSuccess("");
 
-    if (!username.trim()) {
-      setError("Username tidak boleh kosong.");
+    if (!displayName.trim()) {
+      setError("Nama tidak boleh kosong.");
       return;
     }
 
     setSaving(true);
     try {
-      const updateData: Record<string, string> = { username: username.trim() };
-      if (password) updateData.password = password;
+      const updatePayload: { data?: { display_name: string }; password?: string } = {
+        data: { display_name: displayName.trim() },
+      };
+      if (password) updatePayload.password = password;
 
-      const { error: updateErr } = await supabase
-        .from("admin")
-        .update(updateData)
-        .eq("username", currentUsername);
-
+      const { error: updateErr } = await supabase.auth.updateUser(updatePayload);
       if (updateErr) throw updateErr;
 
-      localStorage.setItem("admin_session", username.trim());
-      onSaved(username.trim());
-      onClose();
+      setSuccess("Profil berhasil diperbarui.");
+      onSaved(displayName.trim());
+      setTimeout(() => onClose(), 1000);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Gagal memperbarui profil.");
     } finally {
@@ -80,20 +81,43 @@ function EditProfilModal({
             {error}
           </div>
         )}
+        {success && (
+          <div className="mb-4 px-4 py-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-600 text-xs font-medium">
+            {success}
+          </div>
+        )}
 
         <form onSubmit={handleSave} className="space-y-4">
+
+          {/* Email — read only */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-              Username
+              Email
+            </label>
+            <input
+              type="email"
+              value={currentEmail}
+              disabled
+              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-400 bg-slate-50 cursor-not-allowed"
+            />
+          </div>
+
+          {/* Display Name */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+              Nama Tampilan
             </label>
             <input
               type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Nama yang ditampilkan"
               className={inputCls}
               required
             />
           </div>
+
+          {/* Password Baru */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
               Password Baru
@@ -138,16 +162,30 @@ interface AdminHeaderProps {
 }
 
 export default function AdminHeader({ title, subtitle }: AdminHeaderProps) {
-  const router = useRouter();
-  const [adminName, setAdminName] = useState("Admin");
+  const [email, setEmail]               = useState("");
+  const [displayName, setDisplayName]   = useState("Admin");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Ambil nama admin dari localStorage setelah mount (client-only)
+  // Ambil data user dari Supabase Auth
   useEffect(() => {
-    const session = localStorage.getItem("admin_session");
-    if (session) setAdminName(session);
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      setEmail(user.email ?? "");
+      const name = user.user_metadata?.display_name as string | undefined;
+      setDisplayName(name || (user.email?.split("@")[0] ?? "Admin"));
+    });
+
+    // Update otomatis jika session berubah
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+      if (!session?.user) return;
+      const name = session.user.user_metadata?.display_name as string | undefined;
+      setEmail(session.user.email ?? "");
+      setDisplayName(name || (session.user.email?.split("@")[0] ?? "Admin"));
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   // Tutup dropdown saat klik di luar
@@ -184,11 +222,13 @@ export default function AdminHeader({ title, subtitle }: AdminHeaderProps) {
                 <HiUser className="text-slate-500 dark:text-slate-300 text-lg" />
               </div>
               <div className="text-sm leading-tight text-left">
-                <p className="font-semibold text-slate-800 dark:text-slate-100">{adminName}</p>
-                <p className="text-slate-500 dark:text-slate-400 text-xs">Staff KWU</p>
+                <p className="font-semibold text-slate-800 dark:text-slate-100">{displayName}</p>
+                <p className="text-slate-500 dark:text-slate-400 text-xs">{email || "Staff KWU"}</p>
               </div>
               <HiChevronDown
-                className={`text-slate-400 dark:text-slate-500 text-sm transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""}`}
+                className={`text-slate-400 dark:text-slate-500 text-sm transition-transform duration-200 ${
+                  dropdownOpen ? "rotate-180" : ""
+                }`}
               />
             </button>
 
@@ -212,9 +252,10 @@ export default function AdminHeader({ title, subtitle }: AdminHeaderProps) {
 
       {showEditModal && (
         <EditProfilModal
-          currentUsername={adminName}
+          currentEmail={email}
+          currentDisplayName={displayName}
           onClose={() => setShowEditModal(false)}
-          onSaved={(newName) => setAdminName(newName)}
+          onSaved={(newName) => setDisplayName(newName)}
         />
       )}
     </>

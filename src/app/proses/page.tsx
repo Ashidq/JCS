@@ -3,12 +3,9 @@
 import { use, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
-import Image from "next/image";
+import Header from "../../components/layout/Header";
 import Footer from "../../components/layout/Footer";
 import { memo } from "react";
-import { TbLineScan } from "react-icons/tb";
-import { VscServerProcess } from "react-icons/vsc";
-import { AiOutlineFileDone } from "react-icons/ai";
 import {
   getPublicImageUrl,
   saveOCRResult,
@@ -31,51 +28,6 @@ const STEPS: Record<Step, StepInfo> = {
   2: { label: "Membaca teks OCR",        description: "Tesseract.js mengekstrak teks..." },
   3: { label: "Memvalidasi transaksi",   description: "Menyimpan data ke database..." },
 };
-
-// ============================================================
-// STEPPER
-// ============================================================
-function PageStepper({ active }: { active: "scan" | "proses" | "hasil" }) {
-  const steps = [
-    { key: "scan",   label: "Scan",   icon: TbLineScan },
-    { key: "proses", label: "Proses", icon: VscServerProcess },
-    { key: "hasil",  label: "Hasil",  icon: AiOutlineFileDone },
-  ];
-  const activeIdx = steps.findIndex((s) => s.key === active);
-
-  return (
-    <div className="flex items-center justify-center">
-      {steps.map((step, i) => {
-        const Icon        = step.icon;
-        const isActive    = i === activeIdx;
-        const isCompleted = i < activeIdx;
-        return (
-          <div key={step.key} className="flex items-center">
-            <div className="flex flex-col items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all ${
-                isActive    ? "bg-blue-100 border-blue-500 text-blue-600"
-                : isCompleted ? "bg-blue-500 border-blue-500 text-white"
-                : "bg-gray-100 border-gray-300 text-gray-400"
-              }`}>
-                {isCompleted ? (
-                  <svg className="w-4 h-4" fill="none" stroke="white" strokeWidth={3} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                ) : <Icon size={18} />}
-              </div>
-              <span className={`text-xs font-semibold mt-1 ${isActive || isCompleted ? "text-blue-600" : "text-gray-400"}`}>
-                {step.label}
-              </span>
-            </div>
-            {i < steps.length - 1 && (
-              <div className={`w-16 h-[2px] mb-5 mx-1 ${i < activeIdx ? "bg-blue-500" : "bg-gray-300"}`} />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 // ============================================================
 // MASKOT
@@ -224,7 +176,7 @@ function OCRResultCard({ result }: { result: OCRResult }) {
         <div className="mt-2 space-y-1">
           {result.validationErrors.map((err, i) => (
             <div key={i} className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-1.5">
-              ✗ {err}
+              X {err}
             </div>
           ))}
         </div>
@@ -294,7 +246,6 @@ export default function ProsesPage({
       setCurrentStep(2);
       const result = await performOCR(blob);
       setOcrResult(result);
-      console.log("🧠 OCR Result:", result);
 
       // ── STEP 3: Simpan ke DB ──
       setCurrentStep(3);
@@ -379,31 +330,7 @@ export default function ProsesPage({
       <Script src="/opencv.js" strategy="afterInteractive" onLoad={checkAndSetCVReady} />
 
       {/* HEADER */}
-      <header className="bg-white border-b border-gray-100 shadow-sm">
-        <div className="max-w-7xl mx-auto px-5 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden">
-              <Image
-                src="/logo.png"
-                alt="Logo Jujurly"
-                width={15}
-                height={20}
-                className="object-contain"
-              />
-            </div>
-            <span className="font-bold text-[#2B4C7E] text-base sm:text-lg">
-              Jujurly Canteen System
-            </span>
-          </div>
-            
-          <PageStepper active="proses" />
-            
-          <span className="text-xs sm:text-sm font-bold text-[#2B4C7E]">
-            KWU <span className="text-yellow-400">●</span> HMIT
-          </span>
-        </div>
-        <div className="h-[3px] bg-[#487ADB]" />
-      </header>
+      <Header stepper="scan" />
 
       {/* MAIN */}
       <main className="flex-grow flex items-center justify-center px-6 py-10 pb-28">

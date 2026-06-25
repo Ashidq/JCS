@@ -2,94 +2,12 @@
 
 import { use } from "react";
 import { useRouter } from "next/navigation";
+import Header from "../../components/layout/Header";    
 import Footer from "../../components/layout/Footer";
 import { memo } from "react";
 import Image from "next/image";
-import { VscServerProcess } from "react-icons/vsc";
-import { TbLineScan } from "react-icons/tb";
-import { AiOutlineFileDone } from "react-icons/ai";
+import { ImCross } from "react-icons/im";
 import { getPublicImageUrl } from "../scan/supabase-logic";
-
-// ============================================================
-// STEPPER
-// ============================================================
-function PageStepper({ active }: { active: "scan" | "proses" | "hasil" }) {
-  const steps = [
-    { key: "scan",   label: "Scan",   icon: TbLineScan },
-    { key: "proses", label: "Proses", icon: VscServerProcess },
-    { key: "hasil",  label: "Hasil",  icon: AiOutlineFileDone },
-  ];
-
-  const activeIdx = steps.findIndex((s) => s.key === active);
-
-  return (
-    <div className="flex items-center justify-center">
-      {steps.map((step, i) => {
-        const Icon        = step.icon;
-        const isActive    = i === activeIdx;
-        const isCompleted = i < activeIdx;
-
-        return (
-          <div key={step.key} className="flex items-center">
-
-            <div className="flex flex-col items-center">
-              <div
-                className={`
-                  w-8 h-8 rounded-full
-                  flex items-center justify-center
-                  border-2 transition-all
-                  ${
-                    isActive
-                      ? "bg-blue-100 border-blue-500 text-blue-600"
-                      : isCompleted
-                      ? "bg-blue-500 border-blue-500 text-white"
-                      : "bg-gray-100 border-gray-300 text-gray-400"
-                  }
-                `}
-              >
-                {isCompleted ? (
-                  /* ✅ Centang putih, tanpa dot */
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="white"
-                    strokeWidth={3}
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                ) : (
-                  <Icon size={18} />
-                )}
-              </div>
-
-              <span
-                className={`text-xs font-semibold mt-1 ${
-                  isActive || isCompleted ? "text-blue-600" : "text-gray-400"
-                }`}
-              >
-                {step.label}
-              </span>
-            </div>
-
-            {i < steps.length - 1 && (
-              <div
-                className={`w-16 h-[2px] mb-5 mx-1 ${
-                  i < activeIdx ? "bg-blue-500" : "bg-gray-300"
-                }`}
-              />
-            )}
-
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 // ============================================================
 // MASKOT — selebrasi
@@ -228,32 +146,8 @@ export default function HasilPage({
     <div className="min-h-screen bg-white flex flex-col">
 
       {/* HEADER */}
-      <header className="bg-white border-b border-gray-100 shadow-sm">
-        <div className="max-w-7xl mx-auto px-5 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden">
-              <Image
-                src="/logo.png"
-                alt="Logo Jujurly"
-                width={15}
-                height={20}
-                className="object-contain"
-              />
-            </div>
-                <span className="font-bold text-[#2B4C7E] text-base sm:text-lg">
-                  Jujurly Canteen System
-                </span>
-          </div>
-      
-          <PageStepper active="hasil" />
-      
-          <span className="text-xs sm:text-sm font-bold text-[#2B4C7E]">
-            KWU <span className="text-yellow-400">●</span> HMIT
-          </span>
-        </div>
-        <div className="h-[3px] bg-[#487ADB]" />
-      </header>
-
+      <Header stepper="scan" />
+   
       {/* MAIN */}
       <main className="flex-grow flex items-center justify-center px-6 py-10 pb-28">
         <div className="w-full max-w-4xl grid lg:grid-cols-2 gap-16 items-center">
@@ -305,9 +199,7 @@ export default function HasilPage({
                         <div className="absolute inset-0 bg-red-600/65 backdrop-blur-[2px]" />
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 z-10">
                           <div className="w-10 h-10 rounded-full bg-red-400 flex items-center justify-center shadow-lg ring-4 ring-red-300/50">
-                            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
+                            <ImCross className="w-4 h-4 text-white" />
                           </div>
                           <p className="text-white text-[9px] font-black text-center tracking-widest uppercase mt-1">
                             Transaksi Invalid
@@ -351,9 +243,7 @@ export default function HasilPage({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                 </svg>
               ) : isInvalid ? (
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <ImCross className="w-3 h-3" />
               ) : (
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -408,7 +298,7 @@ export default function HasilPage({
                     : isInvalid ? "bg-red-100 text-red-600"
                     : "bg-yellow-100 text-yellow-600"
                   }`}>
-                    {isValid ? "✓ VALID" : isInvalid ? "X INVALID" : "⏳ PENDING"}
+                    {isValid ? "✓ VALID" : isInvalid ? <span className="flex items-center gap-1"><ImCross className="w-2.5 h-2.5" /> INVALID</span> : "⏳ PENDING"}
                   </span>
                 )},
                 /* Tampilkan ID tambahan dari OCR jika ada */

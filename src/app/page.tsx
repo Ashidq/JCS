@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Script from "next/script";
 import Image from "next/image";
 import { memo } from "react";
+import Header from "../components/layout/Header";
 import Footer from "../components/layout/Footer";
 
 // ── Dipisah & di-memo agar tidak re-render setiap render parent ──
@@ -105,26 +106,7 @@ export default function Home() {
       />
 
       {/* ── HEADER ── */}
-      <header className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <a href="/admin/login" title="Admin Login" className="flex items-center">
-              <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gray-100 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 hover:opacity-90 shadow-sm">
-                <Image src="/logo.png" alt="Logo Jujurly" width={15} height={20} className="object-contain"/>
-              </div>
-            </a>
-            <span className="font-bold text-[#2B4C7E] text-base sm:text-lg">
-              Jujurly Canteen System
-            </span>
-          </div>
-          <div className="flex items-center gap-3 sm:gap-4">
-            <span className="text-xs sm:text-sm font-bold text-[#2B4C7E]">
-              KWU <span className="text-yellow-400">●</span> HMIT
-            </span>
-          </div>
-        </div>
-        <div className="h-[3px] bg-[#487ADB]" />
-      </header>
+      <Header logoClickable />
 
       {/* ── MAIN CONTENT ── */}
       {/*

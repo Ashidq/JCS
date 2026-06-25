@@ -10,11 +10,10 @@ import AdminHeader from "../../../components/admin/AdminHeader";
 
 const tambahAdminSchema = z
   .object({
-    username: z
+    email: z
       .string()
-      .min(3, "Username minimal 3 karakter")
-      .max(50, "Username terlalu panjang")
-      .regex(/^[a-zA-Z0-9_]+$/, "Username hanya boleh huruf, angka, dan underscore")
+      .email("Format email tidak valid")
+      .max(100, "Email terlalu panjang")
       .trim(),
     password: z.string().min(6, "Password minimal 6 karakter").max(100, "Password terlalu panjang"),
     confirmPassword: z.string(),
@@ -26,24 +25,24 @@ const tambahAdminSchema = z
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
-interface AdminRow { id_admin: number; username: string; }
+interface AdminRow { id: string; email: string; created_at: string; }
 
 // ─── Tambah Admin Modal ────────────────────────────────────────────────────
 
 function TambahAdminModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [globalError, setGlobalError] = useState("");
-  const [fieldErrors, setFieldErrors] = useState<{ username?: string; password?: string; confirmPassword?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string; confirmPassword?: string }>({});
 
   const clearFieldError = (field: keyof typeof fieldErrors) =>
     setFieldErrors((p) => ({ ...p, [field]: undefined }));
 
   const handleSave = async () => {
     setGlobalError(""); setFieldErrors({});
-    const result = tambahAdminSchema.safeParse({ username, password, confirmPassword });
+    const result = tambahAdminSchema.safeParse({ email, password, confirmPassword });
     if (!result.success) {
       const errs = result.error.issues.reduce<Record<string, string>>((acc, issue) => {
         const key = String(issue.path[0]);
@@ -55,12 +54,19 @@ function TambahAdminModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
     }
     setSaving(true);
     try {
-      const { data: existing } = await supabase
-        .from("admin").select("username").eq("username", result.data.username).maybeSingle();
-      if (existing) { setFieldErrors({ username: "Username ini sudah digunakan, silakan pilih yang lain." }); return; }
-      const { error: insertErr } = await supabase
-        .from("admin").insert([{ username: result.data.username, password: result.data.password }]);
-      if (insertErr) throw insertErr;
+      // Daftarkan admin baru via Supabase Auth
+      const { error: signUpErr } = await supabase.auth.admin
+        ? await fetch("/api/admin/create-user", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: result.data.email, password: result.data.password }),
+          }).then(async (r) => {
+            const json = await r.json();
+            return { error: r.ok ? null : { message: json.error ?? "Gagal membuat user." } };
+          })
+        : { error: { message: "Admin API tidak tersedia." } };
+
+      if (signUpErr) throw new Error(signUpErr.message);
       onSaved(); onClose();
     } catch (err: unknown) {
       setGlobalError(err instanceof Error ? err.message : "Gagal menyimpan. Coba lagi.");
@@ -84,11 +90,11 @@ function TambahAdminModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         {globalError && <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-500/40 text-red-600 dark:text-red-400 text-xs font-medium">{globalError}</div>}
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">Username</label>
-            <input type="text" placeholder="Masukkan username" value={username}
-              onChange={(e) => { setUsername(e.target.value); clearFieldError("username"); }}
-              className={inputCls(fieldErrors.username)} />
-            {fieldErrors.username && <p className="mt-1 text-xs text-red-500">{fieldErrors.username}</p>}
+            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">Email</label>
+            <input type="email" placeholder="admin@email.com" value={email}
+              onChange={(e) => { setEmail(e.target.value); clearFieldError("email"); }}
+              className={inputCls(fieldErrors.email)} />
+            {fieldErrors.email && <p className="mt-1 text-xs text-red-500">{fieldErrors.email}</p>}
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">Password</label>
@@ -125,10 +131,10 @@ export default function UsersPage() {
   const fetchAdmins = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("admin").select("id_admin, username").order("id_admin", { ascending: true });
-      if (error) throw error;
-      setAdmins((data as AdminRow[]) ?? []);
+      const res = await fetch("/api/admin/list-users");
+      if (!res.ok) throw new Error("Gagal memuat data.");
+      const json = await res.json();
+      setAdmins(json.users ?? []);
     } catch (err: unknown) {
       console.error(err instanceof Error ? err.message : "Gagal memuat data.");
     } finally { setIsLoading(false); }
@@ -136,20 +142,30 @@ export default function UsersPage() {
 
   useEffect(() => { fetchAdmins(); }, [fetchAdmins]);
 
-  const handleDelete = async (id: number, username: string) => {
-    const currentSession = localStorage.getItem("admin_session");
-    if (currentSession === username) { alert("Tidak dapat menghapus akun yang sedang login."); return; }
-    if (!window.confirm(`Hapus admin "${username}"?`)) return;
+  const handleDelete = async (id: string, email: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user?.email === email) {
+      alert("Tidak dapat menghapus akun yang sedang login.");
+      return;
+    }
+    if (!window.confirm(`Hapus admin "${email}"?`)) return;
     try {
-      const { error } = await supabase.from("admin").delete().eq("id_admin", id);
-      if (error) throw error;
+      const res = await fetch("/api/admin/delete-user", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: id }),
+      });
+      if (!res.ok) {
+        const json = await res.json();
+        throw new Error(json.error ?? "Gagal menghapus.");
+      }
       await fetchAdmins();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Gagal menghapus.");
     }
   };
 
-  const filtered = admins.filter((a) => a.username.toLowerCase().includes(search.toLowerCase()));
+  const filtered = admins.filter((a) => a.email.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="p-8 space-y-6">
@@ -177,7 +193,7 @@ export default function UsersPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700">
-              {["ID Admin", "Username", "Aksi"].map((h) => (
+              {["Email", "Terdaftar", "Aksi"].map((h) => (
                 <th key={h} className="text-left px-5 py-3 text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wide">{h}</th>
               ))}
             </tr>
@@ -188,15 +204,17 @@ export default function UsersPage() {
             ) : filtered.length === 0 ? (
               <tr><td colSpan={3} className="px-5 py-10 text-center text-slate-400 text-sm">{search ? "Admin tidak ditemukan." : "Belum ada data admin."}</td></tr>
             ) : filtered.map((admin, i) => (
-              <tr key={admin.id_admin} className={`border-b border-slate-50 dark:border-slate-700/50 transition-colors ${
+              <tr key={admin.id} className={`border-b border-slate-50 dark:border-slate-700/50 transition-colors ${
                 i % 2 === 0
                   ? "bg-white dark:bg-slate-800"
                   : "bg-slate-50/40 dark:bg-slate-700/20"
               } hover:bg-slate-50 dark:hover:bg-slate-700/40`}>
-                <td className="px-5 py-3.5 text-slate-500 dark:text-slate-400 font-mono text-xs">#{admin.id_admin}</td>
-                <td className="px-5 py-3.5 text-slate-800 dark:text-slate-200 font-medium">{admin.username}</td>
+                <td className="px-5 py-3.5 text-slate-800 dark:text-slate-200 font-medium">{admin.email}</td>
+                <td className="px-5 py-3.5 text-slate-500 dark:text-slate-400 text-xs">
+                  {new Date(admin.created_at).toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" })}
+                </td>
                 <td className="px-5 py-3.5">
-                  <button onClick={() => handleDelete(admin.id_admin, admin.username)} title="Hapus admin"
+                  <button onClick={() => handleDelete(admin.id, admin.email)} title="Hapus admin"
                     className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-500 dark:hover:text-red-400 transition-colors">
                     <HiTrash className="text-base" />
                   </button>

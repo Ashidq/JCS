@@ -1,11 +1,10 @@
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 import { validateTransactionDate } from "./ocr-logic";
 
 // ============================================================
 // INISIALISASI SUPABASE CLIENT
 // ============================================================
-
-export const supabase = createClient(
+export const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
@@ -78,8 +77,6 @@ export const uploadAndSaveTransaction = async (
     console.error("[Supabase DB] Gagal insert bukti_pembayaran:", detailError.message);
     throw detailError;
   }
-
-  console.log(`✅ [Supabase] Transaksi tersimpan. ID: ${transData.id_transaksi}, Status: ${buktiStatus}`);
   return transData;
 };
 
@@ -102,7 +99,6 @@ export const deleteBuktiFile = async (idBukti: number | string) => {
       if (error) {
         console.error("⚠️ [Supabase] Gagal menghapus file:", error.message);
       } else {
-        console.log(`🗑️ [Supabase] File sampah (tanpa nominal) dihapus dari storage: ${buktiData.file_gambar}`);
       }
     }
   } catch (err) {
@@ -165,8 +161,6 @@ export const saveOCRResult = async (
     console.error("[Supabase] Gagal insert hasil_ocr:", error.message);
     throw error;
   }
-
-  console.log(`✅ [Supabase] hasil_ocr tersimpan. Bukti ID: ${idBukti}, Nominal: ${nominal}, Merchant: ${merchantName}`);
   return data;
 };
 
@@ -193,8 +187,6 @@ export const updateBuktiStatus = async (
     console.error("[Supabase] Gagal update bukti_pembayaran status:", error.message);
     throw error;
   }
-
-  console.log(`✅ [Supabase] bukti_pembayaran status diperbarui. ID: ${idBukti} → ${status}`);
   return data;
 };
 
@@ -230,11 +222,7 @@ export const updateTransactionFromOCR = async (
   let validasiStatus: "Valid" | "Pending" | "Invalid";
   if (!isStrictMerchantValid) {
     validasiStatus = "Pending";
-  } else if (transactionDate == null) {
-    // Tanggal tidak terbaca OCR → Pending, bisa scan ulang
-    validasiStatus = "Pending";
   } else if (!isTimeValid) {
-    // Tanggal terbaca tapi > 5 menit → Invalid
     validasiStatus = "Invalid";
   } else {
     validasiStatus = "Valid";
@@ -262,7 +250,6 @@ export const updateTransactionFromOCR = async (
     }
 
     idTransaksi = newTrans.id_transaksi;
-    console.log(`✅ [Supabase] Transaksi BARU dibuat: Rp${amount} (${validasiStatus})`);
 
     // Tautkan id_transaksi ke tabel bukti_pembayaran
     await supabase
@@ -283,12 +270,22 @@ export const updateTransactionFromOCR = async (
     if (transErr) {
       console.error("[Supabase] Gagal update transaksi nominal:", transErr.message);
     } else {
-      console.log(`✅ [Supabase] Transaksi DIPERBARUI: Rp${amount} (${validasiStatus})`);
     }
   }
 
   // 3. Update status bukti_pembayaran
   await updateBuktiStatus(idBukti, buktiStatus);
+
+  // 4. Kirim notifikasi ke log_notifikasi jika transaksi Invalid
+  if (validasiStatus === "Invalid") {
+    const alasan = timeValidation && !timeValidation.isValid
+      ? timeValidation.reason
+      : "Transaksi tidak memenuhi syarat validasi.";
+    await supabase.from("log_notifikasi").insert([{
+      pesan:    `Transaksi Invalid — ${alasan}`,
+      read:  false,
+    }]);
+  }
 
   return { validasiStatus, timeValidation };
 };
