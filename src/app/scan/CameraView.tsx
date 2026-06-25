@@ -28,7 +28,7 @@ export const CameraView = forwardRef((props: CameraViewProps, ref) => {
   const captureCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // ⭐ FIX: teruskan handler ke hook
-  const { videoRef, canvasRef, phoneBox } = useCameraCV(
+  const { videoRef, canvasRef } = useCameraCV(
     props.isCVReady,
     props.isCapturing,
     props.onAutoCapture
@@ -47,15 +47,6 @@ export const CameraView = forwardRef((props: CameraViewProps, ref) => {
       });
     }
   }, [props.isCapturing, props.onScanEvent]);
-
-  useEffect(() => {
-    if (!props.onScanEvent || !phoneBox) return;
-
-    props.onScanEvent({
-      type: "DETECTED",
-      message: "Bukti bayar terdeteksi",
-    });
-  }, [phoneBox, props.onScanEvent]);
 
   // ============================================================
   // METHOD capture() — fallback manual only
@@ -121,7 +112,6 @@ export const CameraView = forwardRef((props: CameraViewProps, ref) => {
         isCapturing={props.isCapturing}
         status={props.status}
         isCVReady={props.isCVReady}
-        phoneBox={phoneBox}
       />
     </div>
   );
