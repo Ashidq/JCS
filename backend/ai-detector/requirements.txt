@@ -6,7 +6,7 @@ numpy==1.26.4
 pillow==10.4.0
 
 ultralytics==8.3.0
-torch==2.4.1
+torch
 torchvision==0.19.1
 
 supabase==2.5.1
