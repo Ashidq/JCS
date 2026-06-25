@@ -12,14 +12,15 @@ app = FastAPI(title="Payment Screen Detector API")
 # CORS
 # =========================
 FRONTEND_URL = os.getenv(
-    "https://jcs-tau.vercel.app",
+    "FRONTEND_URL",
     "http://localhost:3000"
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        FRONTEND_URL
+        FRONTEND_URL,
+        "https://jcs-tau.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
