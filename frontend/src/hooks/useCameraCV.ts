@@ -59,7 +59,7 @@ export const useCameraCV = (
         formData.append("file", blob, "capture.jpg");
 
         try {
-          console.log(`📤 [useCameraCV] Capture → ${API_URL}/capture-payment`);
+          console.log(`📤 [useCameraCV] Capture → ${API_URL}/api/capture-payment`);
 
           const res  = await fetch(`${API_URL}/api/capture-payment`, {
             method: "POST",
