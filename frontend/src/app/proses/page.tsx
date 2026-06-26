@@ -271,21 +271,13 @@ export default function ProsesPage({
 
         setIsDone(true);
 
-        if (result.isSuccess && finalStatus !== "Invalid") {
-          // Redirect sukses dengan semua data OCR asli
-          const params = new URLSearchParams({
-            id_bukti:  id_bukti!,
-            file_path: cleanFilePath,
-            amount:    String(result.amount),
-            merchant:  result.merchantName ?? "",
-            status:    finalStatus,
-            metode:    result.paymentMethod ?? "QRIS",
-            tanggal:   result.transactionDate?.toISOString() ?? "",
-            txids:     result.transactionIds.map((t) => `${t.label}:${t.value}`).join("|"),
-          });
-          setTimeout(() => router.push(`/hasil?${params.toString()}`), 2500);
-        } else if (finalStatus === "Invalid") {
-          // Selisih waktu > 5 menit → redirect dengan status Invalid
+        // ── PENTING: hanya redirect ke /hasil jika SEMUA field OCR terbaca ──
+        // Jika ada satu field pun yang kosong (date, merchant, txid, dll),
+        // isSuccess = false → minta user scan ulang, jangan lanjut ke hasil.
+        const allFieldsRead = result.isSuccess; // validationErrors.length === 0
+
+        if (allFieldsRead && finalStatus === "Invalid") {
+          // Semua field terbaca, tapi selisih waktu > 5 menit → benar-benar Invalid
           const params = new URLSearchParams({
             id_bukti:   id_bukti!,
             file_path:  cleanFilePath,
@@ -298,8 +290,22 @@ export default function ProsesPage({
             time_error: txUpdate?.timeValidation?.reason ?? "Selisih waktu melebihi 5 menit",
           });
           setTimeout(() => router.push(`/hasil?${params.toString()}`), 2500);
+        } else if (allFieldsRead && finalStatus === "Valid") {
+          // Semua field terbaca dan waktu valid → redirect sukses
+          const params = new URLSearchParams({
+            id_bukti:  id_bukti!,
+            file_path: cleanFilePath,
+            amount:    String(result.amount),
+            merchant:  result.merchantName ?? "",
+            status:    finalStatus,
+            metode:    result.paymentMethod ?? "QRIS",
+            tanggal:   result.transactionDate?.toISOString() ?? "",
+            txids:     result.transactionIds.map((t) => `${t.label}:${t.value}`).join("|"),
+          });
+          setTimeout(() => router.push(`/hasil?${params.toString()}`), 2500);
         } else {
-          // Pending: amount terbaca tapi data lain tidak lengkap
+          // Ada field yang tidak terbaca (isSuccess = false) atau status masih Pending
+          // → jangan redirect, tampilkan tombol Scan Ulang
           setIsPendingStatus(true);
         }
       } else {

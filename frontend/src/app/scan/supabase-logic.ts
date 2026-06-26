@@ -181,11 +181,16 @@ export const updateTransactionFromOCR = async (
 
   const timeValidation = validateTransactionDate(transactionDate ?? null, 5);
   const isTimeValid = timeValidation.isValid;
+  // Jika tanggal tidak terbaca (null), kita tidak bisa membuktikan transaksi expired.
+  // Status harus Pending (scan ulang), bukan Invalid (tolak).
+  const isDateMissing = transactionDate === null || transactionDate === undefined;
 
   let validasiStatus: "Valid" | "Pending" | "Invalid";
-  if (!isStrictMerchantValid) {
+  if (!isStrictMerchantValid || isDateMissing) {
+    // Merchant tidak cocok ATAU tanggal tidak terbaca → data tidak lengkap → Pending
     validasiStatus = "Pending";
   } else if (!isTimeValid) {
+    // Tanggal terbaca, tapi selisih > 5 menit → benar-benar Invalid
     validasiStatus = "Invalid";
   } else {
     validasiStatus = "Valid";
