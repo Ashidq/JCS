@@ -1,7 +1,7 @@
 "use client";
 
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ||"http://jcs-production.up.railway.app";
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 /**
  * Mengirim frame kamera ke backend Python (FastAPI) untuk deteksi layar HP.

@@ -11,7 +11,7 @@ import { getPublicImageUrl } from "./supabase-logic";
 // ============================================================
 // HELPERS
 // ============================================================
-const API_URL = () => process.env.NEXT_PUBLIC_API_URL || "http://jcs-production.up.railway.app";
+const API_URL = () => process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const resetCaptureLock = () =>
   fetch(`${API_URL()}/api/reset-capture`, { method: "POST" }).catch(() => {});
 

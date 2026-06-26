@@ -6,7 +6,7 @@ import { sendFrameToAPI } from "./useFrameSender";
 import { useStability } from "./useStability";
 
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://jcs-production.up.railway.app";
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface PhoneBox {
   x: number;
