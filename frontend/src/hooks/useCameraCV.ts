@@ -61,7 +61,7 @@ export const useCameraCV = (
         try {
           console.log(`📤 [useCameraCV] Capture → ${API_URL}/capture-payment`);
 
-          const res  = await fetch(`${API_URL}/capture-payment`, {
+          const res  = await fetch(`${API_URL}/api/capture-payment`, {
             method: "POST",
             body: formData,
           });

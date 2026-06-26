@@ -11,7 +11,7 @@ export const sendFrameToAPI = async (blob: Blob) => {
   formData.append("file", blob, "frame.jpg");
 
   try {
-    const res = await fetch(`${API_URL}/detect-payment-screen`, {
+    const res = await fetch(`${API_URL}/api/detect-payment-screen`, {
       method: "POST",
       body: formData,
     });

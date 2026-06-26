@@ -13,7 +13,7 @@ import { getPublicImageUrl } from "./supabase-logic";
 // ============================================================
 const API_URL = () => process.env.NEXT_PUBLIC_API_URL || "http://jcs-production.up.railway.app";
 const resetCaptureLock = () =>
-  fetch(`${API_URL()}/reset-capture`, { method: "POST" }).catch(() => {});
+  fetch(`${API_URL()}/api/reset-capture`, { method: "POST" }).catch(() => {});
 
 // ============================================================
 // TYPES
